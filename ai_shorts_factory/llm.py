@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import Any
 
 from .config import settings
@@ -12,6 +13,8 @@ from .config import settings
 logger = logging.getLogger(__name__)
 
 _client_cache: dict[str, Any] = {}
+
+_RETRYABLE = ("429", "500", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "INTERNAL")
 
 
 def _get_client():
@@ -26,17 +29,32 @@ def _get_client():
     return client
 
 
-def generate_text(prompt: str, *, temperature: float = 0.9) -> str:
-    """Return a plain-text completion from Gemini."""
+def generate_text(prompt: str, *, temperature: float = 0.9, retries: int = 4) -> str:
+    """Return a plain-text completion from Gemini, retrying transient errors."""
     from google.genai import types
 
     client = _get_client()
-    response = client.models.generate_content(
-        model=settings.gemini_text_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(temperature=temperature),
-    )
-    return (response.text or "").strip()
+    last_err: Exception | None = None
+    for attempt in range(retries):
+        try:
+            response = client.models.generate_content(
+                model=settings.gemini_text_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=temperature),
+            )
+            return (response.text or "").strip()
+        except Exception as exc:  # noqa: BLE001 - inspect error to decide retry
+            msg = str(exc)
+            if not any(code in msg for code in _RETRYABLE):
+                raise
+            last_err = exc
+            delay = 5 * (attempt + 1)
+            logger.warning(
+                "Gemini transient error (attempt %d/%d), retrying in %ds: %s",
+                attempt + 1, retries, delay, msg[:120],
+            )
+            time.sleep(delay)
+    raise RuntimeError(f"Gemini failed after {retries} attempts: {last_err}")
 
 
 def _extract_json(text: str) -> str:

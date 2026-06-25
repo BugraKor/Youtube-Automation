@@ -91,16 +91,19 @@ def generate_script(topic: str) -> list[Scene]:
     )
     data = generate_json(prompt, temperature=0.95)
     scenes: list[Scene] = []
-    for i, item in enumerate(data):
+    for item in data:
+        narration = str(item.get("narration", "")).strip()
+        image_prompt = str(item.get("image_prompt", "")).strip()
+        if not narration or not image_prompt:
+            continue
         scenes.append(
             Scene(
-                index=i,
-                narration=str(item.get("narration", "")).strip(),
-                image_prompt=str(item.get("image_prompt", "")).strip(),
+                index=len(scenes),
+                narration=narration,
+                image_prompt=image_prompt,
                 on_screen_text=str(item.get("on_screen_text", "")).strip(),
             )
         )
-    scenes = [s for s in scenes if s.narration and s.image_prompt]
     if not scenes:
         raise ValueError("Script generation returned no usable scenes.")
     return scenes
