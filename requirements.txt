@@ -1,0 +1,17 @@
+# Core
+python-dotenv>=1.0.1
+requests>=2.32.3
+Pillow>=10.4.0
+
+# AI text + image generation (Gemini, unified SDK)
+google-genai>=1.2.0
+
+# AI voiceover
+edge-tts>=6.1.12        # free, no API key
+elevenlabs>=1.9.0       # optional, higher quality
+
+# YouTube upload (Data API v3)
+google-api-python-client>=2.137.0
+google-auth>=2.32.0
+google-auth-oauthlib>=1.2.1
+google-auth-httplib2>=0.2.0
