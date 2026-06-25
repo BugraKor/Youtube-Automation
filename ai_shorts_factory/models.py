@@ -7,6 +7,15 @@ from pathlib import Path
 
 
 @dataclass
+class WordTiming:
+    """A spoken word with start/end offsets (seconds, relative to its scene)."""
+
+    text: str
+    start: float
+    end: float
+
+
+@dataclass
 class Scene:
     """A single scene of a Short: one image, one narration line."""
 
@@ -17,6 +26,7 @@ class Scene:
     image_path: Path | None = None
     audio_path: Path | None = None
     duration: float = 0.0
+    words: list[WordTiming] = field(default_factory=list)
 
 
 @dataclass

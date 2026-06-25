@@ -9,7 +9,7 @@ import textwrap
 from pathlib import Path
 
 from .config import settings
-from .models import Scene
+from .models import Scene, WordTiming
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,9 @@ def make_ken_burns_clip(image: Path, duration: float, out_path: Path, *, zoom_in
         f"crop={sw}:{sh},"
         f"zoompan=z='{zexpr}':d={frames}:"
         f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-        f"s={w}x{h}:fps={fps},setsar=1,format=yuv420p"
+        f"s={w}x{h}:fps={fps},setsar=1,"
+        f"eq=contrast=1.07:saturation=1.12:brightness=-0.02,"
+        f"vignette=PI/5,format=yuv420p"
     )
     cmd = [
         "ffmpeg", "-y",
@@ -129,15 +131,41 @@ def _fmt_ts(seconds: float) -> str:
 
 def _escape_ass(text: str) -> str:
     text = text.replace("\\", " ").replace("{", "(").replace("}", ")")
-    wrapped = textwrap.fill(text, width=20)
+    wrapped = textwrap.fill(text, width=18)
     return wrapped.replace("\n", "\\N")
 
 
+def _escape_word(word: str) -> str:
+    return word.replace("\\", "").replace("{", "(").replace("}", ")").strip()
+
+
+def _chunk_words(words: list[WordTiming], max_words: int, max_chars: int):
+    """Group consecutive words into short on-screen phrases."""
+    chunk: list[WordTiming] = []
+    length = 0
+    for w in words:
+        wlen = len(w.text) + 1
+        if chunk and (len(chunk) >= max_words or length + wlen > max_chars):
+            yield chunk
+            chunk, length = [], 0
+        chunk.append(w)
+        length += wlen
+    if chunk:
+        yield chunk
+
+
 def build_subtitles(scenes: list[Scene], out_path: Path) -> Path:
-    """Build a styled .ass subtitle file timed to each scene's narration."""
+    """Build a styled .ass subtitle file.
+
+    When word timings are available, captions are rendered TikTok-style: short
+    2-3 word phrases that light up word-by-word in sync with the voiceover.
+    Otherwise it falls back to one caption per scene.
+    """
     w, h = settings.video_width, settings.video_height
-    font_size = int(h * 0.045)
-    margin_v = int(h * 0.22)
+    font_size = int(h * 0.055)
+    margin_v = int(h * 0.30)
+    outline = max(4, font_size // 7)
+    # Colours are ASS &HAABBGGRR.  sung=yellow, unsung=white.
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -146,8 +174,8 @@ WrapStyle: 2
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,{font_size},&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,{max(3, font_size // 8)},2,2,60,60,{margin_v},1
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,{font_size},&H0000FFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,{outline},3,2,80,80,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -155,15 +183,41 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     lines = [header]
     t = 0.0
     for scene in scenes:
-        start = t
-        end = t + scene.duration
-        text = _escape_ass(scene.narration)
-        lines.append(
-            f"Dialogue: 0,{_fmt_ts(start)},{_fmt_ts(end)},Default,,0,0,0,,{text}\n"
-        )
-        t = end
+        scene_start = t
+        scene_end = t + scene.duration
+        if scene.words:
+            lines.extend(_word_dialogues(scene, scene_start, scene_end))
+        else:
+            text = "{\\c&H00FFFFFF&}" + _escape_ass(scene.narration)
+            lines.append(
+                f"Dialogue: 0,{_fmt_ts(scene_start)},{_fmt_ts(scene_end)},Default,,0,0,0,,{text}\n"
+            )
+        t = scene_end
     out_path.write_text("".join(lines), encoding="utf-8")
     return out_path
+
+
+def _word_dialogues(scene: Scene, scene_start: float, scene_end: float) -> list[str]:
+    """Build karaoke (\\k) dialogue lines for one scene's word timings."""
+    chunks = list(_chunk_words(scene.words, max_words=3, max_chars=18))
+    out: list[str] = []
+    for i, chunk in enumerate(chunks):
+        start = scene_start + chunk[0].start
+        # Hold the phrase until the next one begins (no flicker between phrases).
+        if i + 1 < len(chunks):
+            end = scene_start + chunks[i + 1][0].start
+        else:
+            end = scene_end
+        parts = []
+        for j, word in enumerate(chunk):
+            nxt = chunk[j + 1].start if j + 1 < len(chunk) else word.end
+            k_cs = max(1, int(round((nxt - word.start) * 100)))
+            parts.append(f"{{\\k{k_cs}}}{_escape_word(word.text)} ")
+        text = "".join(parts).rstrip()
+        out.append(
+            f"Dialogue: 0,{_fmt_ts(start)},{_fmt_ts(end)},Default,,0,0,0,,{text}\n"
+        )
+    return out
 
 
 def assemble(

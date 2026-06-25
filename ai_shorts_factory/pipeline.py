@@ -69,7 +69,7 @@ def create_short(topic: str | None = None) -> VideoProject:
         scene.image_path = img
 
         aud = workdir / "audio" / f"scene_{scene.index:02d}.mp3"
-        tts.synthesize(scene.narration, aud)
+        scene.words = tts.synthesize(scene.narration, aud)
         scene.audio_path = aud
         scene.duration = max(1.2, probe_duration(aud) + 0.35)  # small tail pause
         logger.info("Scene %d assets ready (%.2fs)", scene.index, scene.duration)
