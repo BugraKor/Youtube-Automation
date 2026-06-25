@@ -1,0 +1,69 @@
+name: Publish YouTube Short
+
+# Runs at fixed times each day to generate + upload one Short.
+# Cron is in UTC. Times below target ~09:00 / 13:00 / 19:00 Europe/Istanbul (UTC+3).
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 09:00 Istanbul
+    - cron: "0 10 * * *"  # 13:00 Istanbul
+    - cron: "0 16 * * *"  # 19:00 Istanbul
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Optional: force a specific topic"
+        required: false
+        default: ""
+
+concurrency:
+  group: publish-short
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write YouTube client secret
+        env:
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+        run: printf '%s' "$YOUTUBE_CLIENT_SECRET" > client_secret.json
+
+      - name: Generate and upload Short
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          # Optional overrides:
+          IMAGE_PROVIDER: ${{ vars.IMAGE_PROVIDER || 'pollinations' }}
+          TTS_PROVIDER: ${{ vars.TTS_PROVIDER || 'edge' }}
+          YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'public' }}
+        run: |
+          if [ -n "${{ github.event.inputs.topic }}" ]; then
+            python -m ai_shorts_factory run --topic "${{ github.event.inputs.topic }}"
+          else
+            python -m ai_shorts_factory run
+          fi
+
+      - name: Upload artifacts (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: short-output
+          path: output/**/final.mp4
+          if-no-files-found: ignore
+          retention-days: 7

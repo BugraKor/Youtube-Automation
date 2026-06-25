@@ -1,0 +1,104 @@
+"""Upload finished Shorts to YouTube via the Data API v3."""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+
+from .config import settings
+from .models import VideoProject
+
+logger = logging.getLogger(__name__)
+
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+
+
+def _load_credentials():
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+
+    token_file = Path(settings.youtube_token_file)
+    client_file = Path(settings.youtube_client_secret_file)
+    creds = None
+
+    # 1. CI / headless: build creds from a stored refresh token.
+    if settings.youtube_refresh_token and client_file.exists():
+        info = json.loads(client_file.read_text(encoding="utf-8"))
+        data = info.get("installed") or info.get("web") or {}
+        creds = Credentials(
+            token=None,
+            refresh_token=settings.youtube_refresh_token,
+            token_uri=data.get("token_uri", "https://oauth2.googleapis.com/token"),
+            client_id=data["client_id"],
+            client_secret=data["client_secret"],
+            scopes=SCOPES,
+        )
+        creds.refresh(Request())
+        return creds
+
+    # 2. Reuse a previously saved token.
+    if token_file.exists():
+        creds = Credentials.from_authorized_user_file(str(token_file), SCOPES)
+
+    if creds and creds.valid:
+        return creds
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        token_file.write_text(creds.to_json(), encoding="utf-8")
+        return creds
+
+    # 3. First-time interactive consent.
+    if not client_file.exists():
+        raise RuntimeError(
+            f"Missing OAuth client secret file '{client_file}'. Download it from "
+            "Google Cloud Console (OAuth client, type Desktop) and set "
+            "YOUTUBE_CLIENT_SECRET_FILE."
+        )
+    flow = InstalledAppFlow.from_client_secrets_file(str(client_file), SCOPES)
+    creds = flow.run_local_server(port=0)
+    token_file.write_text(creds.to_json(), encoding="utf-8")
+    return creds
+
+
+def upload_video(project: VideoProject) -> str:
+    """Upload the project's rendered video. Returns the new video id."""
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    if not project.video_path or not Path(project.video_path).exists():
+        raise ValueError("project has no rendered video to upload.")
+    if not project.metadata:
+        raise ValueError("project has no metadata.")
+
+    creds = _load_credentials()
+    youtube = build("youtube", "v3", credentials=creds)
+
+    body = {
+        "snippet": {
+            "title": project.metadata.title,
+            "description": project.metadata.description,
+            "tags": project.metadata.tags,
+            "categoryId": settings.youtube_category_id,
+        },
+        "status": {
+            "privacyStatus": settings.youtube_privacy_status,
+            "selfDeclaredMadeForKids": settings.youtube_made_for_kids,
+        },
+    }
+    media_body = MediaFileUpload(
+        str(project.video_path), chunksize=-1, resumable=True, mimetype="video/mp4"
+    )
+    request = youtube.videos().insert(
+        part="snippet,status", body=body, media_body=media_body
+    )
+
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            logger.info("Upload progress: %d%%", int(status.progress() * 100))
+    video_id = response["id"]
+    logger.info("Uploaded: https://youtu.be/%s", video_id)
+    return video_id
