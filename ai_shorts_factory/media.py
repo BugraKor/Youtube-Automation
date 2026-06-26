@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
@@ -26,6 +28,27 @@ def _run(cmd: list[str], cwd: Path | None = None) -> None:
         raise RuntimeError(
             f"Command failed ({proc.returncode}): {' '.join(cmd)}\n{proc.stderr[-2000:]}"
         )
+
+
+def open_in_player(path: Path) -> None:
+    """Open a media file in the system default player.
+
+    Used to preview a rendered Short locally without relying on an in-IDE video
+    preview (some editors crash trying to render large videos inline).
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Cannot preview, file does not exist: {path}")
+    logger.info("Opening preview: %s", path)
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(str(path))  # type: ignore[attr-defined]  # noqa: SC200 - Windows-only
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)])
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+    except Exception as exc:  # noqa: BLE001 - preview is best-effort
+        logger.warning("Could not open preview automatically (%s). Open it manually: %s", exc, path)
 
 
 def probe_duration(path: Path) -> float:
