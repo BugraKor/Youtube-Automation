@@ -57,18 +57,21 @@ def make_ken_burns_clip(image: Path, duration: float, out_path: Path, *, zoom_in
     sw, sh = int(w * 1.5), int(h * 1.5)  # upscale to keep the zoom smooth
 
     if zoom_in:
-        zexpr = "min(zoom+0.0015,1.20)"
+        zexpr = "min(zoom+0.0012,1.18)"
     else:
-        zexpr = "if(eq(on,1),1.20,max(zoom-0.0015,1.0))"
+        zexpr = "if(eq(on,1),1.18,max(zoom-0.0012,1.0))"
 
+    grain = "noise=alls=7:allf=t+u," if settings.film_grain else ""
     vf = (
         f"scale={sw}:{sh}:force_original_aspect_ratio=increase,"
         f"crop={sw}:{sh},"
         f"zoompan=z='{zexpr}':d={frames}:"
         f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
         f"s={w}x{h}:fps={fps},setsar=1,"
-        f"eq=contrast=1.07:saturation=1.12:brightness=-0.02,"
-        f"vignette=PI/5,format=yuv420p"
+        f"eq=contrast=1.06:saturation=1.14:brightness=-0.015:gamma=0.98,"
+        f"unsharp=5:5:0.6:5:5:0.0,"
+        f"{grain}"
+        f"vignette=PI/4.5,format=yuv420p"
     )
     cmd = [
         "ffmpeg", "-y",
@@ -121,6 +124,106 @@ def concat_audio(tracks: list[Path], out_path: Path, workdir: Path) -> Path:
     return out_path
 
 
+def pad_audio_tail(src: Path, out_path: Path, seconds: float) -> Path:
+    """Copy ``src`` adding ``seconds`` of trailing silence (keeps word timings)."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    _run(
+        [
+            "ffmpeg", "-y",
+            "-i", str(src.resolve()),
+            "-af", f"apad=pad_dur={seconds:.3f}",
+            "-c:a", "libmp3lame", "-q:a", "2",
+            str(out_path.resolve()),
+        ]
+    )
+    return out_path
+
+
+def scene_start_times(durations: list[float], transition: float) -> tuple[list[float], float]:
+    """Return (per-scene start times, total duration) accounting for crossfades."""
+    starts: list[float] = []
+    acc = 0.0
+    n = len(durations)
+    for i, d in enumerate(durations):
+        starts.append(acc)
+        acc += d - (transition if i < n - 1 else 0.0)
+    return starts, acc
+
+
+def concat_videos_xfade(
+    clips: list[Path], durations: list[float], out_path: Path, workdir: Path, transition: float
+) -> Path:
+    """Concatenate clips with smooth crossfades between them."""
+    if transition <= 0 or len(clips) < 2:
+        return concat_videos(clips, out_path, workdir)
+
+    fps = settings.video_fps
+    inputs: list[str] = []
+    for c in clips:
+        inputs += ["-i", str(c.resolve())]
+
+    parts: list[str] = []
+    for i in range(len(clips)):
+        parts.append(f"[{i}:v]settb=AVTB,fps={fps},format=yuv420p[v{i}]")
+
+    prev = "v0"
+    acc = durations[0]
+    for i in range(1, len(clips)):
+        offset = max(0.0, acc - transition)
+        out_lbl = "vout" if i == len(clips) - 1 else f"x{i}"
+        parts.append(
+            f"[{prev}][v{i}]xfade=transition=fade:duration={transition:.3f}:"
+            f"offset={offset:.3f}[{out_lbl}]"
+        )
+        prev = out_lbl
+        acc += durations[i] - transition
+
+    cmd = [
+        "ffmpeg", "-y", *inputs,
+        "-filter_complex", ";".join(parts),
+        "-map", "[vout]",
+        "-r", str(fps),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "16",
+        "-pix_fmt", "yuv420p",
+        str(out_path.resolve()),
+    ]
+    _run(cmd)
+    return out_path
+
+
+def concat_audio_crossfade(
+    tracks: list[Path], out_path: Path, workdir: Path, transition: float
+) -> Path:
+    """Concatenate voice tracks with short crossfades so cuts are seamless."""
+    if transition <= 0 or len(tracks) < 2:
+        return concat_audio(tracks, out_path, workdir)
+
+    inputs: list[str] = []
+    for t in tracks:
+        inputs += ["-i", str(t.resolve())]
+
+    parts: list[str] = []
+    for i in range(len(tracks)):
+        parts.append(f"[{i}:a]aresample=44100[a{i}]")
+    prev = "a0"
+    for i in range(1, len(tracks)):
+        out_lbl = "aout" if i == len(tracks) - 1 else f"ac{i}"
+        parts.append(
+            f"[{prev}][a{i}]acrossfade=d={transition:.3f}:c1=tri:c2=tri[{out_lbl}]"
+        )
+        prev = out_lbl
+
+    cmd = [
+        "ffmpeg", "-y", *inputs,
+        "-filter_complex", ";".join(parts),
+        "-map", "[aout]",
+        "-c:a", "libmp3lame", "-q:a", "2",
+        str(out_path.resolve()),
+    ]
+    _run(cmd)
+    return out_path
+
+
 def _fmt_ts(seconds: float) -> str:
     cs = int(round(seconds * 100))
     h, cs = divmod(cs, 360000)
@@ -154,18 +257,24 @@ def _chunk_words(words: list[WordTiming], max_words: int, max_chars: int):
         yield chunk
 
 
-def build_subtitles(scenes: list[Scene], out_path: Path) -> Path:
-    """Build a styled .ass subtitle file.
+# Entrance pop applied to every caption phrase.
+_POP = r"{\fad(70,40)\t(0,120,\fscx107\fscy107)\t(120,230,\fscx100\fscy100)}"
+
+
+def build_subtitles(scenes: list[Scene], out_path: Path, transition: float = 0.0) -> Path:
+    """Build a styled .ass subtitle file synced to the (crossfaded) timeline.
 
     When word timings are available, captions are rendered TikTok-style: short
-    2-3 word phrases that light up word-by-word in sync with the voiceover.
-    Otherwise it falls back to one caption per scene.
+    2-3 word phrases that pop in and light up word-by-word in sync with the
+    voiceover. Otherwise it falls back to one caption per scene.
     """
     w, h = settings.video_width, settings.video_height
-    font_size = int(h * 0.055)
-    margin_v = int(h * 0.30)
-    outline = max(4, font_size // 7)
-    # Colours are ASS &HAABBGGRR.  sung=yellow, unsung=white.
+    font_size = int(h * 0.058)
+    margin_v = int(h * 0.27)
+    side_margin = int(w * 0.10)
+    outline = max(5, font_size // 6)
+    shadow = max(2, font_size // 18)
+    # Colours are ASS &HAABBGGRR.  sung=bright yellow, unsung=white, dark outline.
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -175,24 +284,24 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,{font_size},&H0000FFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,{outline},3,2,80,80,{margin_v},1
+Style: Default,DejaVu Sans,{font_size},&H0017F0FF,&H00FFFFFF,&H00101010,&HB4000000,-1,0,0,0,100,100,0,0,1,{outline},{shadow},2,{side_margin},{side_margin},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
+    durations = [s.duration for s in scenes]
+    starts, total = scene_start_times(durations, transition)
     lines = [header]
-    t = 0.0
-    for scene in scenes:
-        scene_start = t
-        scene_end = t + scene.duration
+    for i, scene in enumerate(scenes):
+        scene_start = starts[i]
+        scene_end = starts[i + 1] if i + 1 < len(scenes) else total
         if scene.words:
             lines.extend(_word_dialogues(scene, scene_start, scene_end))
         else:
-            text = "{\\c&H00FFFFFF&}" + _escape_ass(scene.narration)
+            text = _POP + "{\\c&H00FFFFFF&}" + _escape_ass(scene.narration)
             lines.append(
                 f"Dialogue: 0,{_fmt_ts(scene_start)},{_fmt_ts(scene_end)},Default,,0,0,0,,{text}\n"
             )
-        t = scene_end
     out_path.write_text("".join(lines), encoding="utf-8")
     return out_path
 
@@ -213,7 +322,7 @@ def _word_dialogues(scene: Scene, scene_start: float, scene_end: float) -> list[
             nxt = chunk[j + 1].start if j + 1 < len(chunk) else word.end
             k_cs = max(1, int(round((nxt - word.start) * 100)))
             parts.append(f"{{\\k{k_cs}}}{_escape_word(word.text)} ")
-        text = "".join(parts).rstrip()
+        text = _POP + "".join(parts).rstrip()
         out.append(
             f"Dialogue: 0,{_fmt_ts(start)},{_fmt_ts(end)},Default,,0,0,0,,{text}\n"
         )
@@ -226,32 +335,91 @@ def assemble(
     subtitles: Path,
     out_path: Path,
     workdir: Path,
+    *,
+    boundaries: list[float] | None = None,
 ) -> Path:
-    """Burn subtitles, mux voice (+optional background music) into final video."""
-    music = settings.background_music
-    inputs = ["-i", str(video_only.resolve()), "-i", str(voice.resolve())]
-    use_music = bool(music) and Path(music).exists()
+    """Burn subtitles and build the final mix.
 
+    Audio chain: voice is loudness-normalised and lightly compressed for a
+    consistent, present sound; an ambient music bed is mixed in and ducked under
+    the voice (sidechain); short whoosh SFX hit each scene transition.
+    """
+    boundaries = boundaries or []
+    total = probe_duration(video_only)
+    fade_out_start = max(0.0, total - 0.5)
+
+    music = settings.background_music
+    use_music = bool(music) and Path(music).exists()
+    sfx = settings.sfx_file
+    use_sfx = settings.enable_sfx and bool(sfx) and Path(sfx).exists() and bool(boundaries)
+
+    # ---- inputs ----
+    inputs: list[str] = ["-i", str(video_only.resolve()), "-i", str(voice.resolve())]
+    video_idx, voice_idx = 0, 1
+    next_idx = 2
+    music_idx = sfx_idx = None
     if use_music:
-        inputs = ["-stream_loop", "-1", "-i", str(Path(music).resolve())] + inputs
-        # indexes: 0=music, 1=video, 2=voice
-        filter_complex = (
-            f"[1:v]subtitles={subtitles.name}[v];"
-            f"[0:a]volume={settings.music_volume}[m];"
-            f"[2:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]"
+        inputs += ["-stream_loop", "-1", "-i", str(Path(music).resolve())]
+        music_idx = next_idx
+        next_idx += 1
+    if use_sfx:
+        inputs += ["-i", str(Path(sfx).resolve())]
+        sfx_idx = next_idx
+        next_idx += 1
+
+    parts: list[str] = []
+    parts.append(
+        f"[{video_idx}:v]subtitles={subtitles.name},"
+        f"fade=t=in:st=0:d=0.4,fade=t=out:st={fade_out_start:.3f}:d=0.5,"
+        f"format=yuv420p[v]"
+    )
+
+    vox_chain = (
+        f"[{voice_idx}:a]loudnorm=I=-15:TP=-1.5:LRA=11,"
+        "acompressor=threshold=-18dB:ratio=3:attack=8:release=180,apad"
+    )
+    mix_labels: list[str] = []
+    if use_music:
+        parts.append(f"{vox_chain},asplit=2[vox][voxkey]")
+        parts.append(
+            f"[{music_idx}:a]volume={settings.music_volume},afade=t=in:st=0:d=1.5[mv]"
         )
+        parts.append(
+            "[mv][voxkey]sidechaincompress=threshold=0.05:ratio=6:attack=5:release=350[mduck]"
+        )
+        mix_labels += ["[vox]", "[mduck]"]
     else:
-        filter_complex = f"[0:v]subtitles={subtitles.name}[v];[1:a]anull[a]"
+        parts.append(f"{vox_chain}[vox]")
+        mix_labels.append("[vox]")
+
+    if use_sfx:
+        k = len(boundaries)
+        split_labels = "".join(f"[sfa{i}]" for i in range(k))
+        parts.append(f"[{sfx_idx}:a]volume={settings.sfx_volume},asplit={k}{split_labels}")
+        for i, tb in enumerate(boundaries):
+            ms = max(0, int((tb - 0.12) * 1000))
+            parts.append(f"[sfa{i}]adelay={ms}|{ms}[sfx{i}]")
+            mix_labels.append(f"[sfx{i}]")
+
+    if len(mix_labels) == 1:
+        audio_out = mix_labels[0]
+    else:
+        parts.append(
+            "".join(mix_labels)
+            + f"amix=inputs={len(mix_labels)}:normalize=0:dropout_transition=0,"
+            "alimiter=limit=0.95[a]"
+        )
+        audio_out = "[a]"
 
     cmd = [
         "ffmpeg", "-y",
         *inputs,
-        "-filter_complex", filter_complex,
-        "-map", "[v]", "-map", "[a]",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+        "-filter_complex", ";".join(parts),
+        "-map", "[v]", "-map", audio_out,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
         "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "192k",
-        "-shortest",
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        "-t", f"{total:.3f}",
         str(out_path.resolve()),
     ]
     _run(cmd, cwd=workdir)

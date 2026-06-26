@@ -85,10 +85,34 @@ class Settings:
     )
     video_fps: int = field(default_factory=lambda: _int(os.getenv("VIDEO_FPS"), 30))
     background_music: str = field(
-        default_factory=lambda: os.getenv("BACKGROUND_MUSIC", "")
+        default_factory=lambda: os.getenv(
+            "BACKGROUND_MUSIC", str(ASSETS_DIR / "music" / "ambient_drone.mp3")
+        )
     )
     music_volume: float = field(
-        default_factory=lambda: _float(os.getenv("MUSIC_VOLUME"), 0.12)
+        default_factory=lambda: _float(os.getenv("MUSIC_VOLUME"), 0.16)
+    )
+
+    # Quality / production polish
+    transition_duration: float = field(
+        default_factory=lambda: _float(os.getenv("TRANSITION_DURATION"), 0.35)
+    )
+    image_enhance: bool = field(
+        default_factory=lambda: _bool(os.getenv("IMAGE_ENHANCE"), True)
+    )
+    film_grain: bool = field(
+        default_factory=lambda: _bool(os.getenv("FILM_GRAIN"), True)
+    )
+    enable_sfx: bool = field(
+        default_factory=lambda: _bool(os.getenv("ENABLE_SFX"), True)
+    )
+    sfx_file: str = field(
+        default_factory=lambda: os.getenv(
+            "SFX_WHOOSH_FILE", str(ASSETS_DIR / "sfx" / "whoosh.mp3")
+        )
+    )
+    sfx_volume: float = field(
+        default_factory=lambda: _float(os.getenv("SFX_VOLUME"), 0.35)
     )
 
     # YouTube

@@ -11,7 +11,9 @@ from . import content, render
 from .config import OUTPUT_DIR
 from .models import VideoProject
 from .providers import images, tts
-from .media import probe_duration
+from .media import pad_audio_tail, probe_duration
+
+_TAIL_SECONDS = 0.45
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +70,15 @@ def create_short(topic: str | None = None) -> VideoProject:
         images.generate_image(scene.image_prompt, img, seed=1000 + scene.index)
         scene.image_path = img
 
+        raw = workdir / "audio" / f"scene_{scene.index:02d}_raw.mp3"
+        scene.words = tts.synthesize(scene.narration, raw)
+        # Pad a trailing pause into the audio itself so audio and video share an
+        # identical timeline (keeps captions/voice perfectly in sync after
+        # crossfades).
         aud = workdir / "audio" / f"scene_{scene.index:02d}.mp3"
-        scene.words = tts.synthesize(scene.narration, aud)
+        pad_audio_tail(raw, aud, _TAIL_SECONDS)
         scene.audio_path = aud
-        scene.duration = max(1.2, probe_duration(aud) + 0.35)  # small tail pause
+        scene.duration = max(1.2, probe_duration(aud))
         logger.info("Scene %d assets ready (%.2fs)", scene.index, scene.duration)
 
     render.render_video(project)
