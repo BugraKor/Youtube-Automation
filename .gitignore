@@ -14,14 +14,16 @@ service_account*.json
 
 # Generated content
 output/
-assets/music/*
-!assets/music/.gitkeep
 *.mp4
-*.mp3
 *.wav
 *.png
 *.jpg
+*.mp3
+
+# ...but keep bundled production assets (music bed, SFX, fonts, art)
+!assets/**/*.mp3
 !assets/**/*.png
+!assets/**/*.jpg
 
 # OS / editor
 .DS_Store
