@@ -1,0 +1,25 @@
+# Cascade / Windsurf agent ignore — keep the agent from indexing large or
+# generated content that can cause slow scans or "Maximum call stack size exceeded".
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Generated content & media
+output/
+*.mp4
+*.wav
+*.mp3
+*.png
+*.jpg
+
+# Bundled binary assets (still committed, just not indexed by the agent)
+assets/
+
+# Caches
+.cache/
+.pytest_cache/
+.mypy_cache/
