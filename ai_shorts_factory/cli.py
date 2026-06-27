@@ -22,6 +22,23 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     print(f"\nVideo: {project.video_path}")
     if project.metadata:
         print(f"Title: {project.metadata.title}")
+    if args.preview and project.video_path:
+        from .media import open_in_player
+
+        open_in_player(project.video_path)
+    return 0
+
+
+def _cmd_preview(args: argparse.Namespace) -> int:
+    """Open an already-rendered video (output/<timestamp>/final.mp4) in a player."""
+    from pathlib import Path
+
+    from .media import open_in_player
+
+    folder = Path(args.folder)
+    video = folder if folder.suffix == ".mp4" else folder / "final.mp4"
+    open_in_player(video)
+    print(f"Preview: {video}")
     return 0
 
 
@@ -81,7 +98,18 @@ def main(argv: list[str] | None = None) -> int:
 
     p_gen = sub.add_parser("generate", help="generate a Short (no upload)")
     p_gen.add_argument("--topic", help="force a specific topic")
+    p_gen.add_argument(
+        "--preview",
+        action="store_true",
+        help="open the finished video in the system default player",
+    )
     p_gen.set_defaults(func=_cmd_generate)
+
+    p_prev = sub.add_parser(
+        "preview", help="open a previously rendered output folder's video"
+    )
+    p_prev.add_argument("folder", help="path to an output/<timestamp> folder")
+    p_prev.set_defaults(func=_cmd_preview)
 
     p_run = sub.add_parser("run", help="generate a Short and upload it")
     p_run.add_argument("--topic", help="force a specific topic")
