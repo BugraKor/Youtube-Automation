@@ -326,10 +326,11 @@ def build_subtitles(scenes: list[Scene], out_path: Path, transition: float = 0.0
     side_margin = int(w * 0.10)
     outline = max(5, font_size // 6)
     shadow = max(2, font_size // 18)
-    # Colours: ASS uses &HAABBGGRR. Active word = vivid cyan (#00FFFF = &H00FFFF00
-    # in BGR), unsung = bright white. Brighter highlight increases retention by
-    # keeping eyes glued to the word-by-word reveal (TikTok-style best practice).
-    primary_colour = "&H0000FFFF"  # vivid cyan (active karaoke word)
+    # Colours: ASS uses &HAABBGGRR. Active word = vivid yellow, unsung = bright
+    # white. A high-contrast highlight increases retention by keeping eyes glued
+    # to the word-by-word reveal (TikTok/Hormozi-style best practice). For cyan
+    # instead, use &H00FFFF00.
+    primary_colour = "&H0000FFFF"  # vivid yellow (active karaoke word)
     secondary_colour = "&H00FFFFFF"  # white (static/unsung text)
     header = f"""[Script Info]
 ScriptType: v4.00+
