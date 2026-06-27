@@ -11,9 +11,10 @@ from . import content, render
 from .config import OUTPUT_DIR
 from .models import VideoProject
 from .providers import images, tts
-from .media import pad_audio_tail, probe_duration
+from .media import pad_audio_tail, probe_duration, trim_leading_silence
 
-_TAIL_SECONDS = 0.45
+# Snappier pacing: 0.35s pause keeps energy high without sounding rushed.
+_TAIL_SECONDS = 0.35
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +73,18 @@ def create_short(topic: str | None = None) -> VideoProject:
 
         raw = workdir / "audio" / f"scene_{scene.index:02d}_raw.mp3"
         scene.words = tts.synthesize(scene.narration, raw)
+
+        # Trim leading silence on the hook scene so voice starts at frame 0.
+        trimmed = raw
+        if scene.index == 0:
+            trimmed = workdir / "audio" / f"scene_{scene.index:02d}_trimmed.mp3"
+            trim_leading_silence(raw, trimmed)
+
         # Pad a trailing pause into the audio itself so audio and video share an
         # identical timeline (keeps captions/voice perfectly in sync after
         # crossfades).
         aud = workdir / "audio" / f"scene_{scene.index:02d}.mp3"
-        pad_audio_tail(raw, aud, _TAIL_SECONDS)
+        pad_audio_tail(trimmed, aud, _TAIL_SECONDS)
         scene.audio_path = aud
         scene.duration = max(1.2, probe_duration(aud))
         logger.info("Scene %d assets ready (%.2fs)", scene.index, scene.duration)

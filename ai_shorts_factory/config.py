@@ -114,6 +114,16 @@ class Settings:
     sfx_volume: float = field(
         default_factory=lambda: _float(os.getenv("SFX_VOLUME"), 0.35)
     )
+    # Opening impact hit — a sub-0.2s sound that fires at frame 0 to stop the
+    # scroll (research: even 0.3s of silence at the open causes swipe-aways).
+    sfx_impact_file: str = field(
+        default_factory=lambda: os.getenv(
+            "SFX_IMPACT_FILE", str(ASSETS_DIR / "sfx" / "impact.mp3")
+        )
+    )
+    sfx_impact_volume: float = field(
+        default_factory=lambda: _float(os.getenv("SFX_IMPACT_VOLUME"), 0.55)
+    )
 
     # YouTube
     youtube_client_secret_file: str = field(

@@ -72,17 +72,46 @@ def probe_duration(path: Path) -> float:
     return float(data["format"]["duration"])
 
 
-def make_ken_burns_clip(image: Path, duration: float, out_path: Path, *, zoom_in: bool) -> Path:
-    """Render a single image into a vertical clip with a slow zoom/pan."""
+def trim_leading_silence(src: Path, out_path: Path, *, threshold_db: int = -35) -> Path:
+    """Remove leading silence from an audio file.
+
+    On Shorts, voice must start within ~0.3s of frame 0 — any silence at the
+    beginning causes viewers to swipe. Uses silenceremove to cut dead air.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    _run(
+        [
+            "ffmpeg", "-y",
+            "-i", str(src.resolve()),
+            "-af",
+            f"silenceremove=start_periods=1:start_duration=0.02:"
+            f"start_threshold={threshold_db}dB",
+            "-c:a", "libmp3lame", "-q:a", "2",
+            str(out_path.resolve()),
+        ]
+    )
+    return out_path
+
+
+def make_ken_burns_clip(
+    image: Path, duration: float, out_path: Path, *, zoom_in: bool, is_hook: bool = False
+) -> Path:
+    """Render a single image into a vertical clip with a slow zoom/pan.
+
+    When *is_hook* is True (scene 0), the zoom starts faster so the very first
+    frame has visible movement — research shows static openings get swiped.
+    """
     w, h = settings.video_width, settings.video_height
     fps = settings.video_fps
     frames = max(1, round(duration * fps))
     sw, sh = int(w * 1.5), int(h * 1.5)  # upscale to keep the zoom smooth
 
+    # Faster initial zoom for the hook scene so frame 0 is never static.
+    step = "0.0020" if is_hook else "0.0012"
     if zoom_in:
-        zexpr = "min(zoom+0.0012,1.18)"
+        zexpr = f"min(zoom+{step},1.18)"
     else:
-        zexpr = "if(eq(on,1),1.18,max(zoom-0.0012,1.0))"
+        zexpr = f"if(eq(on,1),1.18,max(zoom-{step},1.0))"
 
     grain = "noise=alls=7:allf=t+u," if settings.film_grain else ""
     vf = (
@@ -281,7 +310,7 @@ def _chunk_words(words: list[WordTiming], max_words: int, max_chars: int):
 
 
 # Entrance pop applied to every caption phrase.
-_POP = r"{\fad(70,40)\t(0,120,\fscx107\fscy107)\t(120,230,\fscx100\fscy100)}"
+_POP = r"{\fad(60,35)\t(0,100,\fscx110\fscy110)\t(100,200,\fscx100\fscy100)}"
 
 
 def build_subtitles(scenes: list[Scene], out_path: Path, transition: float = 0.0) -> Path:
@@ -297,7 +326,11 @@ def build_subtitles(scenes: list[Scene], out_path: Path, transition: float = 0.0
     side_margin = int(w * 0.10)
     outline = max(5, font_size // 6)
     shadow = max(2, font_size // 18)
-    # Colours are ASS &HAABBGGRR.  sung=bright yellow, unsung=white, dark outline.
+    # Colours: ASS uses &HAABBGGRR. Active word = vivid cyan (#00FFFF = &H00FFFF00
+    # in BGR), unsung = bright white. Brighter highlight increases retention by
+    # keeping eyes glued to the word-by-word reveal (TikTok-style best practice).
+    primary_colour = "&H0000FFFF"  # vivid cyan (active karaoke word)
+    secondary_colour = "&H00FFFFFF"  # white (static/unsung text)
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -307,7 +340,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,DejaVu Sans,{font_size},&H0017F0FF,&H00FFFFFF,&H00101010,&HB4000000,-1,0,0,0,100,100,0,0,1,{outline},{shadow},2,{side_margin},{side_margin},{margin_v},1
+Style: Default,DejaVu Sans,{font_size},{primary_colour},{secondary_colour},&H00101010,&HB4000000,-1,0,0,0,100,100,0,0,1,{outline},{shadow},2,{side_margin},{side_margin},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -375,12 +408,14 @@ def assemble(
     use_music = bool(music) and Path(music).exists()
     sfx = settings.sfx_file
     use_sfx = settings.enable_sfx and bool(sfx) and Path(sfx).exists() and bool(boundaries)
+    impact = settings.sfx_impact_file
+    use_impact = settings.enable_sfx and bool(impact) and Path(impact).exists()
 
     # ---- inputs ----
     inputs: list[str] = ["-i", str(video_only.resolve()), "-i", str(voice.resolve())]
     video_idx, voice_idx = 0, 1
     next_idx = 2
-    music_idx = sfx_idx = None
+    music_idx = sfx_idx = impact_idx = None
     if use_music:
         inputs += ["-stream_loop", "-1", "-i", str(Path(music).resolve())]
         music_idx = next_idx
@@ -388,6 +423,10 @@ def assemble(
     if use_sfx:
         inputs += ["-i", str(Path(sfx).resolve())]
         sfx_idx = next_idx
+        next_idx += 1
+    if use_impact:
+        inputs += ["-i", str(Path(impact).resolve())]
+        impact_idx = next_idx
         next_idx += 1
 
     parts: list[str] = []
@@ -425,6 +464,13 @@ def assemble(
             ms = max(0, int((tb - 0.12) * 1000))
             parts.append(f"[sfa{i}]adelay={ms}|{ms}[sfx{i}]")
             mix_labels.append(f"[sfx{i}]")
+
+    # Opening impact hit at t=0 — grabs attention in the first frame.
+    if use_impact:
+        parts.append(
+            f"[{impact_idx}:a]volume={settings.sfx_impact_volume}[imp]"
+        )
+        mix_labels.append("[imp]")
 
     if len(mix_labels) == 1:
         audio_out = mix_labels[0]

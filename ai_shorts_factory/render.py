@@ -34,6 +34,7 @@ def render_video(project: VideoProject) -> Path:
             scene.duration,
             clip,
             zoom_in=(scene.index % 2 == 0),
+            is_hook=(scene.index == 0),
         )
         clips.append(clip)
         audios.append(scene.audio_path)
