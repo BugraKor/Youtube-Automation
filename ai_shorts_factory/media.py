@@ -391,9 +391,11 @@ def assemble(
         next_idx += 1
 
     parts: list[str] = []
+    # Keep the opening fade-in tiny so frame 0 (the hook) is visible instantly:
+    # on Shorts the first moment decides "viewed vs swiped away".
     parts.append(
         f"[{video_idx}:v]subtitles={subtitles.name},"
-        f"fade=t=in:st=0:d=0.4,fade=t=out:st={fade_out_start:.3f}:d=0.5,"
+        f"fade=t=in:st=0:d=0.12,fade=t=out:st={fade_out_start:.3f}:d=0.5,"
         f"format=yuv420p[v]"
     )
 

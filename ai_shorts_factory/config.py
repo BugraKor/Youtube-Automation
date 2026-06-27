@@ -69,7 +69,7 @@ class Settings:
 
     # Content
     content_theme: str = field(
-        default_factory=lambda: os.getenv("CONTENT_THEME", "what-if-disaster")
+        default_factory=lambda: os.getenv("CONTENT_THEME", "mixed-curiosity")
     )
     content_language: str = field(
         default_factory=lambda: os.getenv("CONTENT_LANGUAGE", "en")
