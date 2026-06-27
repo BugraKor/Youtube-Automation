@@ -47,10 +47,10 @@ class Settings:
 
     # Image generation
     image_provider: str = field(
-        default_factory=lambda: os.getenv("IMAGE_PROVIDER", "pollinations").lower()
+        default_factory=lambda: os.getenv("IMAGE_PROVIDER", "gemini").lower()
     )
     gemini_image_model: str = field(
-        default_factory=lambda: os.getenv("GEMINI_IMAGE_MODEL", "imagen-3.0-generate-002")
+        default_factory=lambda: os.getenv("GEMINI_IMAGE_MODEL", "imagen-4.0-generate-001")
     )
 
     # TTS
