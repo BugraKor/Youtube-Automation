@@ -11,12 +11,23 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from pathlib import Path
 
 from ..config import settings
 from ..models import WordTiming
 
 logger = logging.getLogger(__name__)
+
+# Deep male voices that fit the dark cinematic tone. A random voice is picked
+# per video so consecutive Shorts sound distinct on the feed.
+_EDGE_VOICE_POOL = [
+    "en-US-GuyNeural",       # deep, authoritative
+    "en-US-DavisNeural",     # warm, slightly lower
+    "en-GB-RyanNeural",      # British, dramatic
+    "en-AU-WilliamNeural",   # Australian, distinct
+    "en-US-AndrewNeural",    # calm, narrator-like
+]
 
 
 def synthesize(text: str, out_path: Path) -> list[WordTiming]:
@@ -28,14 +39,33 @@ def synthesize(text: str, out_path: Path) -> list[WordTiming]:
     return _edge(text, out_path)
 
 
+# Cached per-process so every scene in one video uses the same voice.
+_session_voice: str | None = None
+
+
+def pick_voice_for_video() -> str:
+    """Choose and cache the voice for the current video run.
+
+    Call once at the start of the pipeline. All scenes then use the same voice.
+    """
+    global _session_voice  # noqa: PLW0603
+    voice = settings.edge_tts_voice
+    if voice.lower() == "random":
+        voice = random.choice(_EDGE_VOICE_POOL)
+    _session_voice = voice
+    logger.info("Voice for this video: %s", voice)
+    return voice
+
+
 def _edge(text: str, out_path: Path) -> list[WordTiming]:
     import edge_tts  # lazy import
 
     words: list[WordTiming] = []
+    voice = _session_voice or pick_voice_for_video()
 
     async def _run() -> None:
         communicate = edge_tts.Communicate(
-            text, settings.edge_tts_voice, boundary="WordBoundary"
+            text, voice, boundary="WordBoundary"
         )
         with open(out_path, "wb") as fh:
             async for chunk in communicate.stream():

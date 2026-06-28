@@ -47,10 +47,10 @@ class Settings:
 
     # Image generation
     image_provider: str = field(
-        default_factory=lambda: os.getenv("IMAGE_PROVIDER", "pollinations").lower()
+        default_factory=lambda: os.getenv("IMAGE_PROVIDER", "gemini").lower()
     )
     gemini_image_model: str = field(
-        default_factory=lambda: os.getenv("GEMINI_IMAGE_MODEL", "imagen-3.0-generate-002")
+        default_factory=lambda: os.getenv("GEMINI_IMAGE_MODEL", "imagen-4.0-generate-001")
     )
 
     # TTS
@@ -69,7 +69,7 @@ class Settings:
 
     # Content
     content_theme: str = field(
-        default_factory=lambda: os.getenv("CONTENT_THEME", "what-if-disaster")
+        default_factory=lambda: os.getenv("CONTENT_THEME", "mixed-curiosity")
     )
     content_language: str = field(
         default_factory=lambda: os.getenv("CONTENT_LANGUAGE", "en")
@@ -113,6 +113,26 @@ class Settings:
     )
     sfx_volume: float = field(
         default_factory=lambda: _float(os.getenv("SFX_VOLUME"), 0.35)
+    )
+    # Opening impact hit — a sub-0.2s sound that fires at frame 0 to stop the
+    # scroll (research: even 0.3s of silence at the open causes swipe-aways).
+    sfx_impact_file: str = field(
+        default_factory=lambda: os.getenv(
+            "SFX_IMPACT_FILE", str(ASSETS_DIR / "sfx" / "impact.mp3")
+        )
+    )
+    sfx_impact_volume: float = field(
+        default_factory=lambda: _float(os.getenv("SFX_IMPACT_VOLUME"), 0.55)
+    )
+
+    # Pexels (stock video clips — free API key from https://www.pexels.com/api/)
+    pexels_api_key: str = field(
+        default_factory=lambda: os.getenv("PEXELS_API_KEY", "")
+    )
+    # When true AND a Pexels key is set, scenes try to use real stock footage
+    # clips instead of static images with Ken Burns zoom.
+    use_stock_video: bool = field(
+        default_factory=lambda: _bool(os.getenv("USE_STOCK_VIDEO"), True)
     )
 
     # YouTube
