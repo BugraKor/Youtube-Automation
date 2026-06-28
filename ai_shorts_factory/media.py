@@ -93,6 +93,43 @@ def trim_leading_silence(src: Path, out_path: Path, *, threshold_db: int = -35) 
     return out_path
 
 
+def make_stock_clip(
+    video: Path, duration: float, out_path: Path,
+) -> Path:
+    """Trim and reformat a stock video clip to fit the scene duration.
+
+    Crops to 9:16 if needed, applies the same cinematic grading as Ken Burns
+    clips, and trims to exactly *duration* seconds.
+    """
+    w, h = settings.video_width, settings.video_height
+    fps = settings.video_fps
+    grain = "noise=alls=5:allf=t+u," if settings.film_grain else ""
+    vf = (
+        f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+        f"crop={w}:{h},"
+        f"fps={fps},setsar=1,"
+        f"eq=contrast=1.06:saturation=1.14:brightness=-0.015:gamma=0.98,"
+        f"unsharp=5:5:0.4:5:5:0.0,"
+        f"{grain}"
+        f"vignette=PI/5.0,format=yuv420p"
+    )
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(video),
+        "-vf", vf,
+        "-t", f"{duration:.3f}",
+        "-r", str(fps),
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-an",
+        str(out_path),
+    ]
+    _run(cmd)
+    return out_path
+
+
 def make_ken_burns_clip(
     image: Path, duration: float, out_path: Path, *, zoom_in: bool, is_hook: bool = False
 ) -> Path:

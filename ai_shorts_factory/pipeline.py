@@ -8,9 +8,10 @@ import logging
 from pathlib import Path
 
 from . import content, render
-from .config import OUTPUT_DIR
+from .config import OUTPUT_DIR, settings
 from .models import VideoProject
 from .providers import images, tts
+from .providers.videos import search_clip
 from .media import pad_audio_tail, probe_duration, trim_leading_silence
 
 # Snappier pacing: 0.35s pause keeps energy high without sounding rushed.
@@ -66,10 +67,21 @@ def create_short(topic: str | None = None) -> VideoProject:
     project.scenes = content.generate_script(topic)
     logger.info("Script: %d scenes", len(project.scenes))
 
+    use_video = settings.use_stock_video and bool(settings.pexels_api_key)
+
     for scene in project.scenes:
-        img = workdir / "images" / f"scene_{scene.index:02d}.png"
-        images.generate_image(scene.image_prompt, img, seed=1000 + scene.index)
-        scene.image_path = img
+        # Try stock video first, fall back to generated image.
+        if use_video:
+            clip_path = workdir / "clips_raw" / f"scene_{scene.index:02d}.mp4"
+            clip = search_clip(scene.image_prompt, clip_path)
+            if clip:
+                scene.video_clip_path = clip
+                logger.info("Scene %d: using stock video clip", scene.index)
+
+        if not scene.video_clip_path:
+            img = workdir / "images" / f"scene_{scene.index:02d}.png"
+            images.generate_image(scene.image_prompt, img, seed=1000 + scene.index)
+            scene.image_path = img
 
         raw = workdir / "audio" / f"scene_{scene.index:02d}_raw.mp3"
         scene.words = tts.synthesize(scene.narration, raw)

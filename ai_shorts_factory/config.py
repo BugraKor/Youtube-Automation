@@ -125,6 +125,16 @@ class Settings:
         default_factory=lambda: _float(os.getenv("SFX_IMPACT_VOLUME"), 0.55)
     )
 
+    # Pexels (stock video clips — free API key from https://www.pexels.com/api/)
+    pexels_api_key: str = field(
+        default_factory=lambda: os.getenv("PEXELS_API_KEY", "")
+    )
+    # When true AND a Pexels key is set, scenes try to use real stock footage
+    # clips instead of static images with Ken Burns zoom.
+    use_stock_video: bool = field(
+        default_factory=lambda: _bool(os.getenv("USE_STOCK_VIDEO"), True)
+    )
+
     # YouTube
     youtube_client_secret_file: str = field(
         default_factory=lambda: os.getenv("YOUTUBE_CLIENT_SECRET_FILE", "client_secret.json")

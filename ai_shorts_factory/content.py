@@ -33,8 +33,9 @@ logger = logging.getLogger(__name__)
 _CHANNEL_IDENTITY = (
     "a faceless, cinematic channel that triggers awe and a little dread with "
     "curiosity-driven science, space, nature, the deep ocean, the human body, "
-    "the far future and unexplained mysteries. Dark, ominous, jaw-dropping, "
-    "scientifically grounded but dramatic"
+    "history, psychology, technology, unsolved mysteries, strange creatures "
+    "and the far future. Dark, ominous, jaw-dropping, scientifically grounded "
+    "but dramatic"
 )
 
 THEME_DESCRIPTIONS = {
@@ -67,22 +68,59 @@ _CONTENT_FORMATS = [
     "a jaw-dropping discovery scientists actually made",
     "a cosmic-scale comparison that makes the viewer feel tiny",
     "a 'this is happening right now and you don't notice it' reveal",
+    "a 'Top 3 most disturbing/bizarre/strange' ranked list",
+    "a 'scientists can't explain this' anomaly",
+    "a '10-second fact that will change how you see the world'",
+    "a dramatic before-and-after transformation (time, evolution, decay)",
+    "a 'you wouldn't survive 5 seconds here' extreme environment",
+    "a 'this was hidden from the public for decades' reveal",
+    "a 'what would happen to your body if...' scenario",
+    "a 'the real reason why...' counterintuitive explanation",
 ]
 
-# Fresh subject areas, so two videos in a row are rarely about the same thing.
+# Fresh subject areas — deliberately broad so two videos in a row are almost
+# never about the same thing. Every seed still fits the dark/cinematic tone.
 _SUBJECT_SEEDS = [
+    # Space & cosmos
     "black holes, dying stars and the end of the universe",
-    "the deep ocean and what lurks in the abyss",
-    "the Sun and what it does to Earth",
-    "Earth's violent past and mass extinctions",
-    "the human brain, body and consciousness",
-    "time, gravity and the limits of physics",
+    "the edge of the observable universe and what lies beyond",
     "alien life and the Fermi paradox",
-    "future technology, AI and the fate of civilization",
-    "natural disasters and planetary catastrophe",
+    "the Sun and what it does to Earth",
+    # Earth & nature
+    "the deep ocean and what lurks in the abyss",
+    "Earth's violent past and mass extinctions",
+    "natural disasters, supervolcanoes and planetary catastrophe",
     "ancient Earth, lost worlds and deep time",
-    "the edge of the observable universe",
-    "diseases, parasites and the fragility of life",
+    # Human body & mind
+    "the human brain, consciousness and perception",
+    "diseases, parasites, viruses and the fragility of life",
+    "the limits of the human body (pressure, cold, speed, pain)",
+    "sleep, dreams and what happens when the brain shuts down",
+    # History & lost civilizations
+    "lost civilizations and ancient mysteries (Egypt, Maya, Göbekli Tepe)",
+    "forbidden experiments and banned science throughout history",
+    "history's strangest disappearances and unsolved cases",
+    # Psychology & behavior
+    "the science of fear, phobias and the uncanny valley",
+    "cognitive biases and how your brain lies to you",
+    "the psychology of cults, manipulation and mass hysteria",
+    # Technology & future
+    "future technology, AI and the fate of civilization",
+    "deepfakes, surveillance and the death of privacy",
+    "nuclear weapons, radiation and forbidden zones",
+    # Physics & reality
+    "time, gravity, relativity and the limits of physics",
+    "quantum mechanics and the weirdness of reality",
+    "parallel universes, simulation theory and the multiverse",
+    # Strange creatures & evolution
+    "the most bizarre creatures evolution ever created",
+    "extremophiles, tardigrades and life in impossible places",
+    "prehistoric monsters and the creatures that ruled before us",
+    # Mysterious places
+    "the world's most dangerous and forbidden places",
+    "Chernobyl, abandoned cities and places humans left behind",
+    # Resources & survival
+    "water, food, resources and the coming scarcity crisis",
 ]
 
 # Used only as a no-API-key fallback so the pipeline still runs. Broadened so it

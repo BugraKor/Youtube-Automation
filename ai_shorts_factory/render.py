@@ -26,20 +26,28 @@ def render_video(project: VideoProject) -> Path:
     audios: list[Path] = []
     durations: list[float] = []
     for scene in project.scenes:
-        if not scene.image_path or not scene.audio_path:
-            raise ValueError(f"Scene {scene.index} missing image or audio.")
+        if not scene.audio_path:
+            raise ValueError(f"Scene {scene.index} missing audio.")
         clip = clips_dir / f"scene_{scene.index:02d}.mp4"
-        media.make_ken_burns_clip(
-            scene.image_path,
-            scene.duration,
-            clip,
-            zoom_in=(scene.index % 2 == 0),
-            is_hook=(scene.index == 0),
-        )
+
+        if scene.video_clip_path and scene.video_clip_path.exists():
+            media.make_stock_clip(scene.video_clip_path, scene.duration, clip)
+            logger.info("Rendered scene %d from stock video (%.2fs)", scene.index, scene.duration)
+        elif scene.image_path:
+            media.make_ken_burns_clip(
+                scene.image_path,
+                scene.duration,
+                clip,
+                zoom_in=(scene.index % 2 == 0),
+                is_hook=(scene.index == 0),
+            )
+            logger.info("Rendered scene %d from image (%.2fs)", scene.index, scene.duration)
+        else:
+            raise ValueError(f"Scene {scene.index} has no image or video clip.")
+
         clips.append(clip)
         audios.append(scene.audio_path)
         durations.append(scene.duration)
-        logger.info("Rendered scene %d (%.2fs)", scene.index, scene.duration)
 
     video_only = media.concat_videos_xfade(
         clips, durations, workdir / "video_only.mp4", workdir, transition

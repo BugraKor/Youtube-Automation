@@ -24,6 +24,7 @@ class Scene:
     image_prompt: str
     on_screen_text: str = ""
     image_path: Path | None = None
+    video_clip_path: Path | None = None  # stock footage clip (optional)
     audio_path: Path | None = None
     duration: float = 0.0
     words: list[WordTiming] = field(default_factory=list)
