@@ -39,12 +39,21 @@ def synthesize(text: str, out_path: Path) -> list[WordTiming]:
     return _edge(text, out_path)
 
 
-def _pick_voice() -> str:
-    """Return the configured voice, or a random pool voice if set to 'random'."""
+# Cached per-process so every scene in one video uses the same voice.
+_session_voice: str | None = None
+
+
+def pick_voice_for_video() -> str:
+    """Choose and cache the voice for the current video run.
+
+    Call once at the start of the pipeline. All scenes then use the same voice.
+    """
+    global _session_voice  # noqa: PLW0603
     voice = settings.edge_tts_voice
     if voice.lower() == "random":
         voice = random.choice(_EDGE_VOICE_POOL)
-        logger.info("Voice rotation picked: %s", voice)
+    _session_voice = voice
+    logger.info("Voice for this video: %s", voice)
     return voice
 
 
@@ -52,7 +61,7 @@ def _edge(text: str, out_path: Path) -> list[WordTiming]:
     import edge_tts  # lazy import
 
     words: list[WordTiming] = []
-    voice = _pick_voice()
+    voice = _session_voice or pick_voice_for_video()
 
     async def _run() -> None:
         communicate = edge_tts.Communicate(

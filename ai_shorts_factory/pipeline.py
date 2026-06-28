@@ -11,6 +11,7 @@ from . import content, render
 from .config import OUTPUT_DIR, settings
 from .models import VideoProject
 from .providers import images, tts
+from .providers.tts import pick_voice_for_video
 from .providers.videos import search_clip
 from .media import pad_audio_tail, probe_duration, trim_leading_silence
 
@@ -67,6 +68,7 @@ def create_short(topic: str | None = None) -> VideoProject:
     project.scenes = content.generate_script(topic)
     logger.info("Script: %d scenes", len(project.scenes))
 
+    pick_voice_for_video()
     use_video = settings.use_stock_video and bool(settings.pexels_api_key)
 
     for scene in project.scenes:
