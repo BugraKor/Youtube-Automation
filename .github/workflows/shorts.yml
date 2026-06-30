@@ -1,10 +1,10 @@
 name: Publish YouTube Short
 
-# Runs at fixed times each day to generate + upload one Short.
-# Cron is in UTC. Times below target ~09:00 / 13:00 / 19:00 Europe/Istanbul (UTC+3).
+# Runs twice daily to generate + upload one Short per run.
+# Cron is in UTC. Times target 13:00 / 19:00 Europe/Istanbul (UTC+3).
+# 2/day is optimal: avoids self-competition while maintaining consistency.
 on:
   schedule:
-    - cron: "0 6 * * *"   # 09:00 Istanbul
     - cron: "0 10 * * *"  # 13:00 Istanbul
     - cron: "0 16 * * *"  # 19:00 Istanbul
   workflow_dispatch:

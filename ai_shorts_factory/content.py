@@ -19,10 +19,12 @@ keeps broadening without drifting off-brand.
 
 from __future__ import annotations
 
+import datetime as dt
+import json
 import logging
 import random
 
-from .config import settings
+from .config import OUTPUT_DIR, settings
 from .llm import generate_json, generate_text
 from .models import Scene, VideoMetadata
 
@@ -78,50 +80,119 @@ _CONTENT_FORMATS = [
     "a 'the real reason why...' counterintuitive explanation",
 ]
 
-# Fresh subject areas — deliberately broad so two videos in a row are almost
-# never about the same thing. Every seed still fits the dark/cinematic tone.
+# Subject areas grouped by CATEGORY. The category cooldown system ensures we
+# don't repeat the same category within 7 days (prevents audience fatigue and
+# algorithmic self-competition).
+_SUBJECT_CATEGORIES: dict[str, list[str]] = {
+    "space": [
+        "black holes, dying stars and the end of the universe",
+        "the edge of the observable universe and what lies beyond",
+        "alien life and the Fermi paradox",
+        "the Sun and what it does to Earth",
+        "neutron stars, pulsars and magnetars",
+    ],
+    "ocean": [
+        "the deep ocean and what lurks in the abyss",
+        "underwater volcanoes and hydrothermal vents",
+        "bioluminescent creatures in the midnight zone",
+    ],
+    "earth": [
+        "Earth's violent past and mass extinctions",
+        "natural disasters, supervolcanoes and planetary catastrophe",
+        "ancient Earth, lost worlds and deep time",
+    ],
+    "body": [
+        "the human brain, consciousness and perception",
+        "diseases, parasites, viruses and the fragility of life",
+        "the limits of the human body (pressure, cold, speed, pain)",
+        "sleep, dreams and what happens when the brain shuts down",
+    ],
+    "history": [
+        "lost civilizations and ancient mysteries (Egypt, Maya, Göbekli Tepe)",
+        "forbidden experiments and banned science throughout history",
+        "history's strangest disappearances and unsolved cases",
+    ],
+    "psychology": [
+        "the science of fear, phobias and the uncanny valley",
+        "cognitive biases and how your brain lies to you",
+        "the psychology of cults, manipulation and mass hysteria",
+    ],
+    "technology": [
+        "future technology, AI and the fate of civilization",
+        "deepfakes, surveillance and the death of privacy",
+        "nuclear weapons, radiation and forbidden zones",
+    ],
+    "physics": [
+        "time, gravity, relativity and the limits of physics",
+        "quantum mechanics and the weirdness of reality",
+        "parallel universes, simulation theory and the multiverse",
+    ],
+    "creatures": [
+        "the most bizarre creatures evolution ever created",
+        "extremophiles, tardigrades and life in impossible places",
+        "prehistoric monsters and the creatures that ruled before us",
+    ],
+    "places": [
+        "the world's most dangerous and forbidden places",
+        "Chernobyl, abandoned cities and places humans left behind",
+    ],
+    "survival": [
+        "water, food, resources and the coming scarcity crisis",
+    ],
+}
+
+# Flat list for backwards compatibility.
 _SUBJECT_SEEDS = [
-    # Space & cosmos
-    "black holes, dying stars and the end of the universe",
-    "the edge of the observable universe and what lies beyond",
-    "alien life and the Fermi paradox",
-    "the Sun and what it does to Earth",
-    # Earth & nature
-    "the deep ocean and what lurks in the abyss",
-    "Earth's violent past and mass extinctions",
-    "natural disasters, supervolcanoes and planetary catastrophe",
-    "ancient Earth, lost worlds and deep time",
-    # Human body & mind
-    "the human brain, consciousness and perception",
-    "diseases, parasites, viruses and the fragility of life",
-    "the limits of the human body (pressure, cold, speed, pain)",
-    "sleep, dreams and what happens when the brain shuts down",
-    # History & lost civilizations
-    "lost civilizations and ancient mysteries (Egypt, Maya, Göbekli Tepe)",
-    "forbidden experiments and banned science throughout history",
-    "history's strangest disappearances and unsolved cases",
-    # Psychology & behavior
-    "the science of fear, phobias and the uncanny valley",
-    "cognitive biases and how your brain lies to you",
-    "the psychology of cults, manipulation and mass hysteria",
-    # Technology & future
-    "future technology, AI and the fate of civilization",
-    "deepfakes, surveillance and the death of privacy",
-    "nuclear weapons, radiation and forbidden zones",
-    # Physics & reality
-    "time, gravity, relativity and the limits of physics",
-    "quantum mechanics and the weirdness of reality",
-    "parallel universes, simulation theory and the multiverse",
-    # Strange creatures & evolution
-    "the most bizarre creatures evolution ever created",
-    "extremophiles, tardigrades and life in impossible places",
-    "prehistoric monsters and the creatures that ruled before us",
-    # Mysterious places
-    "the world's most dangerous and forbidden places",
-    "Chernobyl, abandoned cities and places humans left behind",
-    # Resources & survival
-    "water, food, resources and the coming scarcity crisis",
+    seed for seeds in _SUBJECT_CATEGORIES.values() for seed in seeds
 ]
+
+_CATEGORY_COOLDOWN_DAYS = 7
+_CATEGORY_HISTORY_FILE = OUTPUT_DIR / "category_history.json"
+
+
+def _load_category_history() -> dict[str, str]:
+    """Return {category: last_used_iso_date}."""
+    if not _CATEGORY_HISTORY_FILE.exists():
+        return {}
+    try:
+        return json.loads(_CATEGORY_HISTORY_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _record_category(category: str) -> None:
+    history = _load_category_history()
+    history[category] = dt.date.today().isoformat()
+    _CATEGORY_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _CATEGORY_HISTORY_FILE.write_text(
+        json.dumps(history, indent=2), encoding="utf-8"
+    )
+
+
+def _pick_subject_with_cooldown() -> tuple[str, str]:
+    """Pick a subject respecting category cooldown. Returns (subject, category)."""
+    history = _load_category_history()
+    today = dt.date.today()
+    available_categories: list[str] = []
+    for cat, last_used in history.items():
+        try:
+            last_date = dt.date.fromisoformat(last_used)
+        except ValueError:
+            available_categories.append(cat)
+            continue
+        if (today - last_date).days >= _CATEGORY_COOLDOWN_DAYS:
+            available_categories.append(cat)
+    # Add categories never used before.
+    for cat in _SUBJECT_CATEGORIES:
+        if cat not in history:
+            available_categories.append(cat)
+    # If all categories are on cooldown, pick the oldest one.
+    if not available_categories:
+        oldest_cat = min(history, key=lambda c: history[c])
+        available_categories = [oldest_cat]
+    category = random.choice(available_categories)
+    subject = random.choice(_SUBJECT_CATEGORIES[category])
+    return subject, category
 
 # Used only as a no-API-key fallback so the pipeline still runs. Broadened so it
 # already spans the wider channel identity, not just disasters.
@@ -146,9 +217,9 @@ def _theme_text() -> str:
 def generate_topic(avoid: list[str] | None = None) -> str:
     """Generate a single viral, on-brand Short topic.
 
-    A random *format* and *subject* are sampled to push variety, then Gemini
-    fuses them into one irresistible, scroll-stopping title that still fits the
-    channel identity.
+    A random *format* and *subject* are sampled (respecting category cooldown)
+    then Gemini fuses them into one irresistible, scroll-stopping title that
+    still fits the channel identity.
     """
     avoid = avoid or []
     if not settings.gemini_api_key:
@@ -157,7 +228,9 @@ def generate_topic(avoid: list[str] | None = None) -> str:
         return random.choice(choices)
 
     fmt = random.choice(_CONTENT_FORMATS)
-    subject = random.choice(_SUBJECT_SEEDS)
+    subject, category = _pick_subject_with_cooldown()
+    _record_category(category)
+    logger.info("Category: %s | Subject: %s", category, subject)
 
     avoid_block = ""
     if avoid:
@@ -172,9 +245,13 @@ def generate_topic(avoid: list[str] | None = None) -> str:
         "Write ONE scroll-stopping Short title. Requirements:\n"
         "- Open a curiosity gap the viewer cannot leave unanswered.\n"
         "- Front-load the most shocking/intriguing word in the first 1-3 words.\n"
-        "- Prefer concrete specifics or numbers over vague words when natural.\n"
+        "- Use a SPECIFIC number, measurement, or concrete detail when natural.\n"
         "- The title alone should make someone NEED to know what happens next.\n"
-        "- 4-8 words, Title Case, no quotes, no emojis, no clickbait lies.\n"
+        "- 4-8 words, Title Case, no quotes, NO EMOJIS, no clickbait lies.\n"
+        "- Do NOT start with generic 'What If' unless the scenario is ultra-specific.\n"
+        "- NEVER produce fiction, storytelling, series episodes, character-based\n"
+        "  narratives, mystery stories, or any non-factual entertainment content.\n"
+        "  Stay strictly within real science, real phenomena, real facts.\n"
         f"- Language: {settings.content_language}.\n"
         f"{avoid_block}\n\n"
         "Return ONLY the title text, nothing else."
@@ -192,7 +269,7 @@ def generate_script(topic: str) -> list[Scene]:
     prompt = (
         "You are an elite YouTube Shorts scriptwriter for "
         f"{_theme_text()}.\n\n"
-        f'Write a script for a ~30-40 second vertical Short titled: "{topic}".\n\n'
+        f'Write a script for a ~25-30 second vertical Short titled: "{topic}".\n\n'
         "Engineer it for the Shorts algorithm. Every replay counts as a new view "
         "(since March 2025), so LOOP STRUCTURE is the #1 priority after the "
         "hook. Hard rules:\n"
@@ -206,14 +283,16 @@ def generate_script(topic: str) -> list[Scene]:
         "- MIDDLE scenes: escalate with ONE concrete, genuinely surprising "
         "fact/number per scene (real science, specific numbers, no vague filler). "
         "Each scene must add new information — never repeat what was said.\n"
-        "- FINAL scene = LOOP TRIGGER: end with a haunting open question or "
-        "mind-bending callback that DIRECTLY references the hook's imagery or "
-        "claim, so when the video replays the viewer feels a seamless loop and "
-        "watches again. The last 3-4 words should feel like a lead-in to the "
-        "first words. Also phrase it so people want to comment or share.\n"
+        "- FINAL scene = LOOP TRIGGER + COMMENT CTA: end with a haunting open "
+        "question or mind-bending callback that DIRECTLY references the hook's "
+        "imagery or claim, so when the video replays the viewer feels a seamless "
+        "loop and watches again. The LAST sentence MUST be a short provocative "
+        "question that DEMANDS a comment (e.g. 'Would you survive?' / 'What "
+        "would you choose?' / 'How long would you last?'). The last 3-4 words "
+        "should feel like a lead-in to the first words.\n"
         "- Every narration line is 1-2 SHORT punchy spoken sentences. NO filler "
         "words, no 'in this video', no calls to like/subscribe. Keep total word "
-        "count low — brevity = higher retention %.\n"
+        "count VERY low (under 80 words total) — brevity = higher retention %.\n"
         f"- Language: {settings.content_language}.\n"
         "- For each scene write a DETAILED, SPECIFIC AI IMAGE PROMPT (English). "
         "Include: exact subject/action, specific camera angle (e.g. extreme "
@@ -222,7 +301,10 @@ def generate_script(topic: str) -> list[Scene]:
         "(dust, fog, embers). Make each prompt visually distinct from the others. "
         "Style: photorealistic cinematic CGI, dark dramatic mood, vertical 9:16, "
         "no text, no people's faces.\n"
-        "- 'on_screen_text' is a punchy 2-4 word caption for the scene.\n\n"
+        "- 'on_screen_text': for SCENE 1 this MUST be a bold 2-4 word hook that "
+        "captures the video's core shock/question (this will be rendered as a "
+        "large overlay to catch silent viewers). For other scenes, a punchy "
+        "2-4 word caption.\n\n"
         "Return ONLY a JSON array of objects with keys: "
         '"narration", "image_prompt", "on_screen_text".'
     )
@@ -265,10 +347,12 @@ def generate_metadata(topic: str, narration: str) -> VideoMetadata:
         f"Narration: {narration}\n\n"
         "Return ONLY a JSON object with keys:\n"
         '- "title": <=70 chars, curiosity-driven, front-load the hook word; '
-        "title only, no quotes.\n"
-        '- "description": a 1-sentence hook, then 1-2 sentences of context, then '
-        "a question that invites comments, then 3-4 relevant hashtags ending "
-        "with #shorts.\n"
+        "title only, no quotes, NO EMOJIS. Use a specific number or detail.\n"
+        '- "description": Start with a 1-sentence hook. Then 1-2 sentences of '
+        "context. Then a DIRECT engagement question that begs a comment (e.g. "
+        "'Would you survive this? Tell us in the comments 👇' or 'What would you "
+        "do first? Drop your answer below'). End with 4-5 relevant hashtags "
+        "including #shorts.\n"
         '- "tags": array of 12-15 lowercase keyword strings mixing broad and '
         "specific search terms.\n"
     )
