@@ -75,7 +75,7 @@ class Settings:
         default_factory=lambda: os.getenv("CONTENT_LANGUAGE", "en")
     )
     scenes_per_video: int = field(
-        default_factory=lambda: _int(os.getenv("SCENES_PER_VIDEO"), 6)
+        default_factory=lambda: _int(os.getenv("SCENES_PER_VIDEO"), 5)
     )
 
     # Video

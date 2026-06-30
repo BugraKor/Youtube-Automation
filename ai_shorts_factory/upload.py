@@ -101,4 +101,48 @@ def upload_video(project: VideoProject) -> str:
             logger.info("Upload progress: %d%%", int(status.progress() * 100))
     video_id = response["id"]
     logger.info("Uploaded: https://youtu.be/%s", video_id)
+
+    # Post and pin an engagement comment to boost algorithmic signals.
+    _post_pinned_comment(youtube, video_id, project.topic)
+
     return video_id
+
+
+# Engagement comment templates — rotated randomly to feel organic.
+_COMMENT_TEMPLATES = [
+    "Would you survive this? Drop your answer below 👇",
+    "What would you do in this situation? Tell me 👇",
+    "How long do you think you'd last? Comment below 👇",
+    "This still keeps me up at night. What's YOUR theory? 👇",
+    "Scientists are divided on this. What do YOU think? 👇",
+    "Rate how terrifying this is: 1-10 👇",
+    "Could humanity actually survive this? Your thoughts 👇",
+    "What fact here shocked you the most? Let me know 👇",
+]
+
+
+def _post_pinned_comment(youtube, video_id: str, topic: str) -> None:
+    """Post a pinned comment on the video to encourage engagement."""
+    import random
+
+    comment_text = random.choice(_COMMENT_TEMPLATES)
+    try:
+        result = youtube.commentThreads().insert(
+            part="snippet",
+            body={
+                "snippet": {
+                    "videoId": video_id,
+                    "topLevelComment": {
+                        "snippet": {"textOriginal": comment_text}
+                    },
+                }
+            },
+        ).execute()
+        comment_id = result["snippet"]["topLevelComment"]["id"]
+        # Pin the comment so it stays at the top.
+        youtube.comments().setModerationStatus(
+            id=comment_id, moderationStatus="published"
+        ).execute()
+        logger.info("Pinned comment posted on %s", video_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not post pinned comment: %s", exc)

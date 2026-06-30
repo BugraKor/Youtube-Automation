@@ -356,6 +356,9 @@ def build_subtitles(scenes: list[Scene], out_path: Path, transition: float = 0.0
     When word timings are available, captions are rendered TikTok-style: short
     2-3 word phrases that pop in and light up word-by-word in sync with the
     voiceover. Otherwise it falls back to one caption per scene.
+
+    Scene 1 also gets a large "HookText" overlay (25-35% of screen) that grabs
+    the attention of silent viewers in the first second.
     """
     w, h = settings.video_width, settings.video_height
     font_size = int(h * 0.058)
@@ -363,6 +366,14 @@ def build_subtitles(scenes: list[Scene], out_path: Path, transition: float = 0.0
     side_margin = int(w * 0.10)
     outline = max(5, font_size // 6)
     shadow = max(2, font_size // 18)
+
+    # Hook text style: large bold text (30% of screen height) for scene 1.
+    hook_font_size = int(h * 0.072)
+    hook_outline = max(7, hook_font_size // 5)
+    hook_shadow = max(3, hook_font_size // 12)
+    hook_margin_v = int(h * 0.32)
+    hook_side_margin = int(w * 0.06)
+
     # Colours: ASS uses &HAABBGGRR. Active word = vivid yellow, unsung = bright
     # white. A high-contrast highlight increases retention by keeping eyes glued
     # to the word-by-word reveal (TikTok/Hormozi-style best practice). For cyan
@@ -379,6 +390,7 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Default,DejaVu Sans,{font_size},{primary_colour},{secondary_colour},&H00101010,&HB4000000,-1,0,0,0,100,100,0,0,1,{outline},{shadow},2,{side_margin},{side_margin},{margin_v},1
+Style: HookText,DejaVu Sans,{hook_font_size},&H0000FFFF,&H00FFFFFF,&H00000000,&HC0000000,-1,0,0,0,100,100,2,0,1,{hook_outline},{hook_shadow},8,{hook_side_margin},{hook_side_margin},{hook_margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -386,6 +398,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     durations = [s.duration for s in scenes]
     starts, total = scene_start_times(durations, transition)
     lines = [header]
+
+    # Hook text overlay on scene 1 — large bold text for silent viewers.
+    if scenes and scenes[0].on_screen_text:
+        hook_end = min(starts[1] if len(starts) > 1 else total, starts[0] + 3.0)
+        hook_text = scenes[0].on_screen_text.upper()
+        hook_anim = (
+            r"{\fad(80,250)\t(0,150,\fscx115\fscy115)\t(150,300,\fscx100\fscy100)}"
+        )
+        lines.append(
+            f"Dialogue: 1,{_fmt_ts(starts[0])},{_fmt_ts(hook_end)},HookText,,0,0,0,,"
+            f"{hook_anim}{_escape_ass(hook_text)}\n"
+        )
+
     for i, scene in enumerate(scenes):
         scene_start = starts[i]
         scene_end = starts[i + 1] if i + 1 < len(scenes) else total
