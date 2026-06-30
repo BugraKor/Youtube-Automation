@@ -47,10 +47,12 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          # Optional overrides:
-          IMAGE_PROVIDER: ${{ vars.IMAGE_PROVIDER || 'pollinations' }}
+          IMAGE_PROVIDER: ${{ vars.IMAGE_PROVIDER || 'gemini' }}
           TTS_PROVIDER: ${{ vars.TTS_PROVIDER || 'edge' }}
+          EDGE_TTS_VOICE: ${{ vars.EDGE_TTS_VOICE || 'random' }}
+          USE_STOCK_VIDEO: "true"
           YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'public' }}
         run: |
           if [ -n "${{ github.event.inputs.topic }}" ]; then
