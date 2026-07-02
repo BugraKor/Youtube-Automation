@@ -64,8 +64,9 @@ def _edge(text: str, out_path: Path) -> list[WordTiming]:
     voice = _session_voice or pick_voice_for_video()
 
     async def _run() -> None:
+        rate = settings.tts_rate
         communicate = edge_tts.Communicate(
-            text, voice, boundary="WordBoundary"
+            text, voice, rate=rate, boundary="WordBoundary"
         )
         with open(out_path, "wb") as fh:
             async for chunk in communicate.stream():

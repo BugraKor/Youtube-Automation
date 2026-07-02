@@ -78,6 +78,10 @@ _CONTENT_FORMATS = [
     "a 'this was hidden from the public for decades' reveal",
     "a 'what would happen to your body if...' scenario",
     "a 'the real reason why...' counterintuitive explanation",
+    "a '99% of people don't know this' elite-knowledge reveal",
+    "a rapid-fire '3 facts in 20 seconds' micro-list",
+    "a 'your brain can't process this' perception-breaking visual fact",
+    "a 'this happens every X seconds and nobody notices' revelation",
 ]
 
 # Subject areas grouped by CATEGORY. The category cooldown system ensures we
@@ -248,6 +252,9 @@ def generate_topic(avoid: list[str] | None = None) -> str:
         "- Use a SPECIFIC number, measurement, or concrete detail when natural.\n"
         "- The title alone should make someone NEED to know what happens next.\n"
         "- 4-8 words, Title Case, no quotes, NO EMOJIS, no clickbait lies.\n"
+        "- The title MUST make the viewer feel they'll learn something others "
+        "don't know — the #1 share trigger for science content is making "
+        "viewers feel intelligent.\n"
         "- Do NOT start with generic 'What If' unless the scenario is ultra-specific.\n"
         "- NEVER produce fiction, storytelling, series episodes, character-based\n"
         "  narratives, mystery stories, or any non-factual entertainment content.\n"
@@ -269,20 +276,25 @@ def generate_script(topic: str) -> list[Scene]:
     prompt = (
         "You are an elite YouTube Shorts scriptwriter for "
         f"{_theme_text()}.\n\n"
-        f'Write a script for a ~25-30 second vertical Short titled: "{topic}".\n\n'
-        "Engineer it for the Shorts algorithm. Every replay counts as a new view "
-        "(since March 2025), so LOOP STRUCTURE is the #1 priority after the "
-        "hook. Hard rules:\n"
+        f'Write a script for a ~20-25 second vertical Short titled: "{topic}".\n\n'
+        "Engineer it for the 2026 Shorts algorithm. Key metrics: average view "
+        "duration MUST exceed 80% of video length (the algorithm threshold for "
+        "expanded reach), loop rate 1.2x+, and viewed-vs-swiped ratio above 75%. "
+        "Every replay counts as a new view, so LOOP STRUCTURE is the #1 priority "
+        "after the hook. Hard rules:\n"
         f"- Exactly {n} scenes.\n"
-        "- SCENE 1 = THE HOOK. The first 3-4 spoken words must deliver an "
-        "instant shock, bold claim or curiosity gap. State the most fascinating "
-        "promise immediately. Max 10 words total. NEVER start with a greeting, "
-        "'imagine', 'picture this', or any slow setup.\n"
-        "- SCENE 2 = RE-HOOK: deepen the mystery or raise stakes so the viewer "
-        "commits. Use a pattern-interrupt (unexpected twist, contradiction).\n"
-        "- MIDDLE scenes: escalate with ONE concrete, genuinely surprising "
-        "fact/number per scene (real science, specific numbers, no vague filler). "
-        "Each scene must add new information — never repeat what was said.\n"
+        "- SCENE 1 = THE HOOK (max 8 words). The first 2-3 spoken words must "
+        "deliver an instant shock, bold claim or curiosity gap — the algorithm "
+        "tests viewer reaction in the first 1-3 seconds. State the most "
+        "fascinating promise immediately. NEVER start with a greeting, 'imagine', "
+        "'picture this', or any slow setup.\n"
+        "- SCENE 2 = RE-HOOK + ESCALATION: deepen the mystery or raise stakes "
+        "with a pattern-interrupt (unexpected twist, contradiction). Include ONE "
+        "specific surprising number or measurement.\n"
+        "- SCENE 3 = PEAK PAYOFF: deliver the most jaw-dropping fact. This is "
+        "the 'hump' that maximises the retention curve mid-video and triggers "
+        "shares. Make the viewer feel smart for watching — this emotion drives "
+        "the most shares in science content.\n"
         "- FINAL scene = LOOP TRIGGER + COMMENT CTA: end with a haunting open "
         "question or mind-bending callback that DIRECTLY references the hook's "
         "imagery or claim, so when the video replays the viewer feels a seamless "
@@ -292,19 +304,23 @@ def generate_script(topic: str) -> list[Scene]:
         "should feel like a lead-in to the first words.\n"
         "- Every narration line is 1-2 SHORT punchy spoken sentences. NO filler "
         "words, no 'in this video', no calls to like/subscribe. Keep total word "
-        "count VERY low (under 80 words total) — brevity = higher retention %.\n"
+        "count VERY low (under 55 words total) — brevity = higher retention %. "
+        "The 20-25 second range has the highest algorithm performance in 2026.\n"
         f"- Language: {settings.content_language}.\n"
         "- For each scene write a DETAILED, SPECIFIC AI IMAGE PROMPT (English). "
         "Include: exact subject/action, specific camera angle (e.g. extreme "
         "close-up, wide establishing shot, low-angle), lighting type (e.g. rim "
         "light, god-rays, bioluminescence), color palette, atmosphere/particles "
-        "(dust, fog, embers). Make each prompt visually distinct from the others. "
+        "(dust, fog, embers). Each scene's visual MUST be dramatically different "
+        "from the previous one (different scale, different palette, different "
+        "angle) to maintain stimulus density — at least 1 visual change every "
+        "2-3 seconds prevents viewer fatigue. "
         "Style: photorealistic cinematic CGI, dark dramatic mood, vertical 9:16, "
         "no text, no people's faces.\n"
         "- 'on_screen_text': for SCENE 1 this MUST be a bold 2-4 word hook that "
         "captures the video's core shock/question (this will be rendered as a "
         "large overlay to catch silent viewers). For other scenes, a punchy "
-        "2-4 word caption.\n\n"
+        "2-4 word caption that adds a micro-payoff even on mute.\n\n"
         "Return ONLY a JSON array of objects with keys: "
         '"narration", "image_prompt", "on_screen_text".'
     )
@@ -352,14 +368,19 @@ def generate_metadata(topic: str, narration: str) -> VideoMetadata:
         "context. Then a DIRECT engagement question that begs a comment (e.g. "
         "'Would you survive this? Tell us in the comments 👇' or 'What would you "
         "do first? Drop your answer below'). End with 4-5 relevant hashtags "
-        "including #shorts.\n"
-        '- "tags": array of 12-15 lowercase keyword strings mixing broad and '
-        "specific search terms.\n"
+        "including #shorts. Include 2-3 hashtags in Turkish that match the "
+        "topic (e.g. #bilim #uzay #evren #ger\u00e7ekler) to capture the Turkish "
+        "audience alongside the global English audience.\n"
+        '- "tags": array of 18-20 lowercase keyword strings. Mix broad English '
+        "search terms (e.g. 'science facts', 'space', 'what if') with specific "
+        "English terms AND 3-4 Turkish equivalents (e.g. 'bilim', 'uzay', "
+        "'ilgin\u00e7 bilgiler', 'k\u0131sa video') to maximise discoverability "
+        "across both audiences.\n"
     )
     data = generate_json(prompt, temperature=0.8)
     title = str(data.get("title", topic))[:100]
     description = str(data.get("description", topic))
-    tags = [str(t) for t in data.get("tags", [])][:15]
+    tags = [str(t) for t in data.get("tags", [])][:20]
     if "shorts" not in [t.lower() for t in tags]:
         tags.append("shorts")
     return VideoMetadata(title=title, description=description, tags=tags)
@@ -369,12 +390,7 @@ def _fallback_script(topic: str, n: int) -> list[Scene]:
     lines = [
         (f"{topic}", "ominous cinematic wide shot establishing the scenario", topic[:24]),
         (
-            "At first, almost nothing seems to change.",
-            "eerie calm before disaster, dramatic sky",
-            "The calm",
-        ),
-        (
-            "But within hours, everything starts to break down.",
+            "Within seconds, everything starts to break down.",
             "chaos unfolding, dramatic destruction, photorealistic",
             "It begins",
         ),
@@ -384,14 +400,9 @@ def _fallback_script(topic: str, n: int) -> list[Scene]:
             "Catastrophe",
         ),
         (
-            "Most life as we know it could not survive.",
-            "desolate apocalyptic landscape, cold lighting",
-            "No survival",
-        ),
-        (
-            "So next time you look up, remember how fragile it all is.",
+            "So next time you look up, remember how fragile it all is. Would you survive?",
             "lone figure looking at vast dramatic sky, hopeful yet ominous",
-            "Stay curious",
+            "Would you?",
         ),
     ]
     out: list[Scene] = []
