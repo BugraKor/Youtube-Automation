@@ -118,6 +118,10 @@ _COMMENT_TEMPLATES = [
     "Rate how terrifying this is: 1-10 👇",
     "Could humanity actually survive this? Your thoughts 👇",
     "What fact here shocked you the most? Let me know 👇",
+    "I bet you didn't know this before watching. What surprised you? 👇",
+    "Tag someone who NEEDS to see this 👇",
+    "Save this before it disappears from your feed 🔖",
+    "Which fact blew your mind the most? 1, 2, or 3? 👇",
 ]
 
 

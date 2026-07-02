@@ -143,8 +143,9 @@ def make_ken_burns_clip(
     frames = max(1, round(duration * fps))
     sw, sh = int(w * 1.5), int(h * 1.5)  # upscale to keep the zoom smooth
 
-    # Faster initial zoom for the hook scene so frame 0 is never static.
-    step = "0.0020" if is_hook else "0.0012"
+    # Faster zoom across all scenes for higher stimulus density; hook scene
+    # is even faster so frame 0 is never static.
+    step = "0.0028" if is_hook else "0.0018"
     if zoom_in:
         zexpr = f"min(zoom+{step},1.18)"
     else:
@@ -367,12 +368,13 @@ def build_subtitles(scenes: list[Scene], out_path: Path, transition: float = 0.0
     outline = max(5, font_size // 6)
     shadow = max(2, font_size // 18)
 
-    # Hook text style: large bold text (30% of screen height) for scene 1.
-    hook_font_size = int(h * 0.072)
-    hook_outline = max(7, hook_font_size // 5)
-    hook_shadow = max(3, hook_font_size // 12)
-    hook_margin_v = int(h * 0.32)
-    hook_side_margin = int(w * 0.06)
+    # Hook text style: large bold text for scene 1. Sized at 9% of screen
+    # height so it dominates the frame and grabs silent viewers instantly.
+    hook_font_size = int(h * 0.090)
+    hook_outline = max(8, hook_font_size // 5)
+    hook_shadow = max(4, hook_font_size // 10)
+    hook_margin_v = int(h * 0.30)
+    hook_side_margin = int(w * 0.05)
 
     # Colours: ASS uses &HAABBGGRR. Active word = vivid yellow, unsung = bright
     # white. A high-contrast highlight increases retention by keeping eyes glued
@@ -400,11 +402,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     lines = [header]
 
     # Hook text overlay on scene 1 — large bold text for silent viewers.
+    # Show for the full duration of scene 1 so silent scrollers can read it.
     if scenes and scenes[0].on_screen_text:
-        hook_end = min(starts[1] if len(starts) > 1 else total, starts[0] + 3.0)
+        hook_end = starts[1] if len(starts) > 1 else total
         hook_text = scenes[0].on_screen_text.upper()
         hook_anim = (
-            r"{\fad(80,250)\t(0,150,\fscx115\fscy115)\t(150,300,\fscx100\fscy100)}"
+            r"{\fad(80,350)\t(0,150,\fscx115\fscy115)\t(150,300,\fscx100\fscy100)}"
         )
         lines.append(
             f"Dialogue: 1,{_fmt_ts(starts[0])},{_fmt_ts(hook_end)},HookText,,0,0,0,,"

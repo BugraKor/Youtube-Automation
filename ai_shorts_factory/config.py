@@ -75,7 +75,7 @@ class Settings:
         default_factory=lambda: os.getenv("CONTENT_LANGUAGE", "en")
     )
     scenes_per_video: int = field(
-        default_factory=lambda: _int(os.getenv("SCENES_PER_VIDEO"), 5)
+        default_factory=lambda: _int(os.getenv("SCENES_PER_VIDEO"), 4)
     )
 
     # Video
@@ -95,7 +95,7 @@ class Settings:
 
     # Quality / production polish
     transition_duration: float = field(
-        default_factory=lambda: _float(os.getenv("TRANSITION_DURATION"), 0.35)
+        default_factory=lambda: _float(os.getenv("TRANSITION_DURATION"), 0.25)
     )
     image_enhance: bool = field(
         default_factory=lambda: _bool(os.getenv("IMAGE_ENHANCE"), True)
@@ -123,6 +123,13 @@ class Settings:
     )
     sfx_impact_volume: float = field(
         default_factory=lambda: _float(os.getenv("SFX_IMPACT_VOLUME"), 0.55)
+    )
+
+    # TTS speech rate: percentage adjustment for Edge TTS delivery speed.
+    # Positive = faster.  +18% gives an energetic, "presenter" pace without
+    # sounding robotic (research: faster narration boosts retention on Shorts).
+    tts_rate: str = field(
+        default_factory=lambda: os.getenv("TTS_RATE", "+18%")
     )
 
     # Pexels (stock video clips — free API key from https://www.pexels.com/api/)
