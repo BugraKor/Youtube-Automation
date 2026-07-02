@@ -35,7 +35,8 @@ logger = logging.getLogger(__name__)
 _CHANNEL_IDENTITY = (
     "a faceless, cinematic channel that triggers awe and a little dread with "
     "curiosity-driven science, space, nature, the deep ocean, the human body, "
-    "history, psychology, technology, unsolved mysteries, strange creatures "
+    "history, psychology, technology, unsolved mysteries, strange creatures, "
+    "mythology, ancient civilizations, medical anatomy, unexplained phenomena "
     "and the far future. Dark, ominous, jaw-dropping, scientifically grounded "
     "but dramatic"
 )
@@ -62,6 +63,7 @@ THEME_DESCRIPTIONS = {
 # Proven high-curiosity Short *formats*. We rotate through these so the feed
 # does not feel repetitive while staying inside the channel identity.
 _CONTENT_FORMATS = [
+    # Core curiosity formats
     "a shocking 'What If' hypothetical scenario",
     "a terrifying real scientific fact almost nobody knows",
     "an unsolved mystery that science still cannot explain",
@@ -82,6 +84,22 @@ _CONTENT_FORMATS = [
     "a rapid-fire '3 facts in 20 seconds' micro-list",
     "a 'your brain can't process this' perception-breaking visual fact",
     "a 'this happens every X seconds and nobody notices' revelation",
+    # Myth vs. Truth (cognitive dissonance hook — high retention format)
+    "a 'everyone thinks X but the truth is Y' myth-busting reveal",
+    # Countdown tension (numbered stakes build suspense)
+    "a countdown of the '3 most terrifying/impossible/forbidden' things",
+    # Story hook + reveal (tease mystery, deliver payoff)
+    "a 'scientists discovered something they weren't supposed to find' reveal",
+    # Scale/size comparison (proven viral format)
+    "a mind-blowing size or scale comparison that reframes reality",
+    # Medical/body mechanism (highest CPM niche)
+    "a 'this is what happens inside your body when...' medical reveal",
+    # Ancient mystery (mythology crossover)
+    "an ancient myth that turned out to be scientifically accurate",
+    # Perception/optical illusion
+    "a 'you've been seeing this wrong your entire life' perception shift",
+    # Extreme statistics
+    "a statistic so extreme it sounds fake but is scientifically proven",
 ]
 
 # Subject areas grouped by CATEGORY. The category cooldown system ensures we
@@ -94,54 +112,100 @@ _SUBJECT_CATEGORIES: dict[str, list[str]] = {
         "alien life and the Fermi paradox",
         "the Sun and what it does to Earth",
         "neutron stars, pulsars and magnetars",
+        "rogue planets drifting alone through interstellar space",
+        "cosmic collisions, galaxy mergers and stellar explosions",
+        "the cosmic microwave background and echoes of the Big Bang",
     ],
     "ocean": [
         "the deep ocean and what lurks in the abyss",
         "underwater volcanoes and hydrothermal vents",
         "bioluminescent creatures in the midnight zone",
+        "ocean sounds, the Bloop, and unexplained underwater signals",
+        "shipwrecks, sunken cities and what the ocean has swallowed",
     ],
     "earth": [
         "Earth's violent past and mass extinctions",
         "natural disasters, supervolcanoes and planetary catastrophe",
         "ancient Earth, lost worlds and deep time",
+        "extreme weather phenomena (ball lightning, fire tornadoes, ice storms)",
+        "Earth's magnetic field, pole reversals and geomagnetic storms",
     ],
     "body": [
         "the human brain, consciousness and perception",
         "diseases, parasites, viruses and the fragility of life",
         "the limits of the human body (pressure, cold, speed, pain)",
         "sleep, dreams and what happens when the brain shuts down",
+        "what happens inside your body during extreme stress or fear",
+        "the immune system at war: how your body fights invaders",
+        "human anatomy surprises most people don't know about",
     ],
     "history": [
         "lost civilizations and ancient mysteries (Egypt, Maya, Göbekli Tepe)",
         "forbidden experiments and banned science throughout history",
         "history's strangest disappearances and unsolved cases",
+        "ancient engineering that shouldn't have been possible",
+        "classified projects and experiments governments hid for decades",
     ],
     "psychology": [
         "the science of fear, phobias and the uncanny valley",
         "cognitive biases and how your brain lies to you",
         "the psychology of cults, manipulation and mass hysteria",
+        "why your brain creates false memories and déjà vu",
+        "the psychology of decision-making under extreme pressure",
     ],
     "technology": [
         "future technology, AI and the fate of civilization",
         "deepfakes, surveillance and the death of privacy",
         "nuclear weapons, radiation and forbidden zones",
+        "abandoned megaprojects and technology the world gave up on",
     ],
     "physics": [
         "time, gravity, relativity and the limits of physics",
         "quantum mechanics and the weirdness of reality",
         "parallel universes, simulation theory and the multiverse",
+        "the speed of light and what would happen if you could break it",
+        "antimatter, dark matter and the invisible universe",
     ],
     "creatures": [
         "the most bizarre creatures evolution ever created",
         "extremophiles, tardigrades and life in impossible places",
         "prehistoric monsters and the creatures that ruled before us",
+        "parasites that hijack their host's brain and behavior",
+        "deep sea giants and creatures we've barely ever filmed",
     ],
     "places": [
         "the world's most dangerous and forbidden places",
         "Chernobyl, abandoned cities and places humans left behind",
+        "places on Earth that look like alien worlds",
     ],
     "survival": [
         "water, food, resources and the coming scarcity crisis",
+        "what happens to the human body in extreme environments",
+    ],
+    "mythology": [
+        "Greek gods, titans and the wars that shaped Olympus",
+        "Norse mythology: Ragnarök, Odin, Thor and the World Tree",
+        "Egyptian gods, the afterlife and the Book of the Dead",
+        "ancient myths that turned out to match real science",
+        "mythological creatures that may have been based on real animals",
+    ],
+    "unexplained": [
+        "unexplained signals, lights and phenomena science can't solve",
+        "the Wow! signal, Hessdalen lights and other anomalies",
+        "numbers stations, coded transmissions and mysterious broadcasts",
+        "objects and artifacts that shouldn't exist (out-of-place artifacts)",
+    ],
+    "medical": [
+        "rare medical conditions that seem impossible",
+        "what happens to organs during surgery, trauma or extreme cold",
+        "the microbiome: trillions of organisms living inside you",
+        "how anesthesia works (and why we still don't fully understand it)",
+    ],
+    "scale": [
+        "size comparisons: atoms to galaxies and everything between",
+        "speed comparisons: from a snail to the speed of light",
+        "time comparisons: human history vs the age of the universe",
+        "energy comparisons: a heartbeat vs a supernova",
     ],
 }
 
@@ -150,7 +214,7 @@ _SUBJECT_SEEDS = [
     seed for seeds in _SUBJECT_CATEGORIES.values() for seed in seeds
 ]
 
-_CATEGORY_COOLDOWN_DAYS = 7
+_CATEGORY_COOLDOWN_DAYS = 5
 _CATEGORY_HISTORY_FILE = OUTPUT_DIR / "category_history.json"
 
 
@@ -211,6 +275,16 @@ _FALLBACK_TOPICS = [
     "What Lives At The Bottom Of The Ocean?",
     "The Signal From Space No One Can Explain",
     "What If Earth Stopped Spinning Right Now?",
+    "The Parasite That Controls Its Host's Mind",
+    "Ancient Greeks Knew This 2000 Years Early",
+    "Your Body Does This Every 7 Seconds",
+    "The Place On Earth Where Gravity Breaks",
+    "Why Anesthesia Still Baffles Scientists",
+    "Norse Gods Predicted This Real Disaster",
+    "3 Signals From Space We Can't Explain",
+    "The Size Of A Neutron Star Will Haunt You",
+    "What Happens Inside You During A Panic Attack",
+    "The Ancient City Hidden Under The Ocean",
 ]
 
 
