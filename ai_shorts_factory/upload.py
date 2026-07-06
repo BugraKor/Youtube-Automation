@@ -106,6 +106,14 @@ def upload_video(project: VideoProject) -> str:
     pinned = project.metadata.pinned_comment if project.metadata else ""
     _post_pinned_comment(youtube, video_id, pinned)
 
+    # Record the upload for the self-improvement loop.
+    try:
+        from . import optimizer
+
+        optimizer.record_upload(project.topic, video_id)
+    except Exception as exc:  # tracking must never fail an upload
+        logger.warning("Could not record upload for optimizer: %s", exc)
+
     return video_id
 
 
