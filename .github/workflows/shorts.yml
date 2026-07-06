@@ -76,12 +76,14 @@ jobs:
             python -m ai_shorts_factory run
           fi
 
-      # Refresh public stats + winning-pattern weights (skips gracefully
-      # when YOUTUBE_API_KEY is not configured).
+      # Refresh Analytics metrics (retention, watch time, subs — needs the
+      # refresh token with yt-analytics.readonly scope) + winning-pattern
+      # weights; falls back to public stats via YOUTUBE_API_KEY.
       - name: Self-improvement loop
         if: always()
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
         run: python -m ai_shorts_factory optimize || true
 
       - name: Save optimizer state

@@ -124,5 +124,15 @@ def create_short(topic: str | None = None) -> VideoProject:
     )
 
     _record_topic(topic, project.video_path)
+    try:
+        from . import optimizer
+
+        optimizer.record_detail(
+            topic,
+            hook=project.scenes[0].narration if project.scenes else None,
+            duration_seconds=round(sum(s.duration for s in project.scenes), 1),
+        )
+    except Exception as exc:  # tracking must never fail the pipeline
+        logger.warning("Could not record details for optimizer: %s", exc)
     logger.info("Done: %s", project.video_path)
     return project
