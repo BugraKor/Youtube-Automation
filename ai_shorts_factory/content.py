@@ -361,7 +361,9 @@ def generate_script(topic: str) -> list[Scene]:
         "deliver an instant shock, bold claim or curiosity gap — the algorithm "
         "tests viewer reaction in the first 1-3 seconds. State the most "
         "fascinating promise immediately. NEVER start with a greeting, 'imagine', "
-        "'picture this', or any slow setup.\n"
+        "'picture this', or any slow setup. Scene 1's image_prompt MUST describe "
+        "the single most striking, jaw-dropping visual of the entire video — the "
+        "first 0.5 seconds decides viewed-vs-swiped, so save nothing for later.\n"
         "- SCENE 2 = RE-HOOK + ESCALATION: deepen the mystery or raise stakes "
         "with a pattern-interrupt (unexpected twist, contradiction). Include ONE "
         "specific surprising number or measurement.\n"
@@ -376,6 +378,11 @@ def generate_script(topic: str) -> list[Scene]:
         "question that DEMANDS a comment (e.g. 'Would you survive?' / 'What "
         "would you choose?' / 'How long would you last?'). The last 3-4 words "
         "should feel like a lead-in to the first words.\n"
+        "- COMMENT-BAIT DETAIL: deliberately leave ONE small, concrete detail "
+        "open, unresolved or mildly debatable (a number people will want to "
+        "verify, a claim experts disagree on, an unanswered 'but how?') so "
+        "viewers feel compelled to comment. Never state false facts — leave a "
+        "true detail incomplete instead.\n"
         "- Every narration line is 1-2 SHORT punchy spoken sentences. NO filler "
         "words, no 'in this video', no calls to like/subscribe. Keep total word "
         "count VERY low (under 55 words total) — brevity = higher retention %. "
@@ -437,7 +444,10 @@ def generate_metadata(topic: str, narration: str) -> VideoMetadata:
         f"Narration: {narration}\n\n"
         "Return ONLY a JSON object with keys:\n"
         '- "title": <=70 chars, curiosity-driven, front-load the hook word; '
-        "title only, no quotes, NO EMOJIS. Use a specific number or detail.\n"
+        "title only, no quotes, NO EMOJIS. Use a specific number or detail. "
+        "Serve BOTH browse and search: keep the emotional hook first, then "
+        "include one high-volume search keyword phrase people actually type "
+        "(e.g. 'black hole', 'deep ocean') naturally inside the title.\n"
         '- "description": Start with a 1-sentence hook. Then 1-2 sentences of '
         "context. Then a DIRECT engagement question that begs a comment (e.g. "
         "'Would you survive this? Tell us in the comments 👇' or 'What would you "
@@ -450,6 +460,10 @@ def generate_metadata(topic: str, narration: str) -> VideoMetadata:
         "English terms AND 3-4 Turkish equivalents (e.g. 'bilim', 'uzay', "
         "'ilgin\u00e7 bilgiler', 'k\u0131sa video') to maximise discoverability "
         "across both audiences.\n"
+        '- "pinned_comment": ONE short provocative question about THIS video, '
+        "crafted to start a debate in the comments — target a detail people "
+        "will disagree about or want to answer from their own experience. "
+        "End with '\U0001f447'. Max 100 chars.\n"
     )
     data = generate_json(prompt, temperature=0.8)
     title = str(data.get("title", topic))[:100]
@@ -457,7 +471,13 @@ def generate_metadata(topic: str, narration: str) -> VideoMetadata:
     tags = [str(t) for t in data.get("tags", [])][:20]
     if "shorts" not in [t.lower() for t in tags]:
         tags.append("shorts")
-    return VideoMetadata(title=title, description=description, tags=tags)
+    pinned_comment = str(data.get("pinned_comment", "")).strip()[:200]
+    return VideoMetadata(
+        title=title,
+        description=description,
+        tags=tags,
+        pinned_comment=pinned_comment,
+    )
 
 
 def _fallback_script(topic: str, n: int) -> list[Scene]:

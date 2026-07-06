@@ -35,6 +35,7 @@ class VideoMetadata:
     title: str
     description: str
     tags: list[str] = field(default_factory=list)
+    pinned_comment: str = ""
 
 
 @dataclass
