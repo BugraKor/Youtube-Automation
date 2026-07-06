@@ -69,13 +69,46 @@ class Settings:
 
     # Content
     content_theme: str = field(
-        default_factory=lambda: os.getenv("CONTENT_THEME", "mixed-curiosity")
+        default_factory=lambda: os.getenv("CONTENT_THEME", "viral-psychology")
     )
     content_language: str = field(
         default_factory=lambda: os.getenv("CONTENT_LANGUAGE", "en")
     )
     scenes_per_video: int = field(
-        default_factory=lambda: _int(os.getenv("SCENES_PER_VIDEO"), 4)
+        default_factory=lambda: _int(os.getenv("SCENES_PER_VIDEO"), 5)
+    )
+
+    # Quality gates (self-optimizing content system). Candidates are scored by
+    # the LLM and rejected/regenerated when below these thresholds.
+    quality_gates: bool = field(
+        default_factory=lambda: _bool(os.getenv("QUALITY_GATES"), True)
+    )
+    min_virality_score: int = field(
+        default_factory=lambda: _int(os.getenv("MIN_VIRALITY_SCORE"), 85)
+    )
+    min_emotional_impact: int = field(
+        default_factory=lambda: _int(os.getenv("MIN_EMOTIONAL_IMPACT"), 80)
+    )
+    min_hook_score: int = field(
+        default_factory=lambda: _int(os.getenv("MIN_HOOK_SCORE"), 90)
+    )
+    min_retention_prediction: int = field(
+        default_factory=lambda: _int(os.getenv("MIN_RETENTION_PREDICTION"), 75)
+    )
+    min_ctr_prediction: int = field(
+        default_factory=lambda: _int(os.getenv("MIN_CTR_PREDICTION"), 70)
+    )
+    topic_attempts: int = field(
+        default_factory=lambda: _int(os.getenv("TOPIC_ATTEMPTS"), 3)
+    )
+    script_attempts: int = field(
+        default_factory=lambda: _int(os.getenv("SCRIPT_ATTEMPTS"), 2)
+    )
+
+    # Optional YouTube Data API key (public stats only) for the
+    # self-improvement loop. Without it the loop is skipped gracefully.
+    youtube_api_key: str = field(
+        default_factory=lambda: os.getenv("YOUTUBE_API_KEY", "")
     )
 
     # Video

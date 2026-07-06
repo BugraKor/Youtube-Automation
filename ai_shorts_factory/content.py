@@ -24,6 +24,7 @@ import json
 import logging
 import random
 
+from . import optimizer
 from .config import OUTPUT_DIR, settings
 from .llm import generate_json, generate_text
 from .models import Scene, VideoMetadata
@@ -41,8 +42,21 @@ _CHANNEL_IDENTITY = (
     "but dramatic"
 )
 
+# Viral psychology identity (default): human behavior content for a 16-35,
+# English-speaking Shorts audience — the fastest-monetizing faceless niche.
+_PSYCH_IDENTITY = (
+    "a faceless, cinematic channel about the psychology of human behavior — "
+    "attraction, dark psychology, brain science, emotions, relationships, "
+    "cognitive biases, habits and self-improvement. Every video makes a 16-35 "
+    "year old viewer feel personally seen ('this is literally me'), taps "
+    "curiosity, fear, attraction, mystery and relatability, and is "
+    "scientifically grounded but emotionally charged"
+)
+
 THEME_DESCRIPTIONS = {
-    # Umbrella theme: broad subjects, single cohesive tone (default).
+    # Default theme: viral psychology (fastest monetization niche).
+    "viral-psychology": _PSYCH_IDENTITY,
+    # Umbrella theme: broad science/curiosity subjects, single cohesive tone.
     "mixed-curiosity": _CHANNEL_IDENTITY,
     # Kept for backwards compatibility; now part of the wider identity.
     "what-if-disaster": (
@@ -209,6 +223,108 @@ _SUBJECT_CATEGORIES: dict[str, list[str]] = {
     ],
 }
 
+# Psychology formats: every angle triggers curiosity, fear, attraction,
+# mystery, emotional impact or relatability.
+_PSYCH_FORMATS = [
+    "a 'Why you...' hyper-relatable behavior explanation",
+    "a 'Why smart people...' counterintuitive psychology reveal",
+    "a dark psychology tactic people use on you without you noticing",
+    "the hidden psychology behind a universal relationship experience",
+    "a 'your brain does this and you can't stop it' brain-science reveal",
+    "a psychological sign almost everyone misreads",
+    "a cognitive bias that secretly controls your decisions",
+    "the real reason an emotionally painful experience happens",
+    "a 'psychologists found...' study result that feels personal",
+    "a '99% of people don't know why they do this' behavior reveal",
+    "a psychology-of-attraction mechanism that feels forbidden to know",
+    "a 'this is why you can't stop thinking about them' emotional loop",
+    "a manipulation red flag disguised as normal behavior",
+    "a habit-loop mechanism that explains a daily struggle",
+    "a 'your childhood explains this' developmental psychology reveal",
+    "a 'people who do X are actually Y' personality decoder",
+    "a social-behavior rule everyone follows without realizing",
+    "a 'why rejection/ghosting physically hurts' neuroscience reveal",
+]
+
+_PSYCH_SUBJECT_CATEGORIES: dict[str, list[str]] = {
+    "attraction": [
+        "the psychology of attraction and desire",
+        "why you can't stop thinking about someone",
+        "what makes people instantly likeable or magnetic",
+        "the science of chemistry, eye contact and body language",
+        "why playing hard to get works (and when it backfires)",
+    ],
+    "relationships": [
+        "why people suddenly lose interest",
+        "the psychology behind ghosting and breadcrumbing",
+        "why you miss people who hurt you",
+        "attachment styles and why you love the way you do",
+        "why couples fight about nothing",
+    ],
+    "dark-psychology": [
+        "how narcissists and manipulators actually operate",
+        "gaslighting, love bombing and covert control tactics",
+        "psychological tricks salespeople and apps use on you",
+        "why cult leaders and con artists are so convincing",
+        "red flags disguised as charm",
+    ],
+    "brain": [
+        "why your brain replays embarrassing memories at night",
+        "how dopamine hijacks your motivation and focus",
+        "why your brain sabotages you before big moments",
+        "memory glitches: déjà vu, false memories, blackouts",
+        "what anxiety and overthinking physically do to your brain",
+    ],
+    "emotions": [
+        "why humans need validation",
+        "why embarrassment, shame and guilt feel physically painful",
+        "why crying, venting and music actually regulate emotions",
+        "emotional numbness and why you feel nothing sometimes",
+        "why loneliness is as harmful as smoking",
+    ],
+    "social": [
+        "why smart people overthink and stay quiet in groups",
+        "the psychology of first impressions and status games",
+        "why people act differently online vs in person",
+        "herd behavior: why crowds make you dumber",
+        "why we copy the people we admire",
+    ],
+    "biases": [
+        "cognitive biases that control your money decisions",
+        "why you think you're right even when you're wrong",
+        "the spotlight effect: nobody notices you as much as you think",
+        "why first information anchors everything you believe",
+        "survivorship bias and why success advice is broken",
+    ],
+    "habits": [
+        "why bad habits are so hard to break",
+        "the psychology of procrastination and instant gratification",
+        "how tiny habits rewire identity",
+        "why motivation dies and discipline wins",
+        "doomscrolling: why you can't put the phone down",
+    ],
+    "self-improvement": [
+        "why comparing yourself to others destroys you",
+        "impostor syndrome and why success feels fake",
+        "the psychology of confidence and self-sabotage",
+        "why your comfort zone shrinks when unused",
+        "how your self-talk rewires your future behavior",
+    ],
+}
+
+
+def _is_psych_theme() -> bool:
+    return settings.content_theme == "viral-psychology"
+
+
+def _active_formats() -> list[str]:
+    return _PSYCH_FORMATS if _is_psych_theme() else _CONTENT_FORMATS
+
+
+def _active_categories() -> dict[str, list[str]]:
+    return _PSYCH_SUBJECT_CATEGORIES if _is_psych_theme() else _SUBJECT_CATEGORIES
+
+
 # Flat list for backwards compatibility.
 _SUBJECT_SEEDS = [
     seed for seeds in _SUBJECT_CATEGORIES.values() for seed in seeds
@@ -238,11 +354,18 @@ def _record_category(category: str) -> None:
 
 
 def _pick_subject_with_cooldown() -> tuple[str, str]:
-    """Pick a subject respecting category cooldown. Returns (subject, category)."""
+    """Pick a subject respecting category cooldown. Returns (subject, category).
+
+    Categories are sampled proportionally to learned performance weights
+    (self-improvement loop), so winning categories appear more often.
+    """
+    categories = _active_categories()
     history = _load_category_history()
     today = dt.date.today()
     available_categories: list[str] = []
     for cat, last_used in history.items():
+        if cat not in categories:
+            continue
         try:
             last_date = dt.date.fromisoformat(last_used)
         except ValueError:
@@ -251,15 +374,20 @@ def _pick_subject_with_cooldown() -> tuple[str, str]:
         if (today - last_date).days >= _CATEGORY_COOLDOWN_DAYS:
             available_categories.append(cat)
     # Add categories never used before.
-    for cat in _SUBJECT_CATEGORIES:
+    for cat in categories:
         if cat not in history:
             available_categories.append(cat)
     # If all categories are on cooldown, pick the oldest one.
     if not available_categories:
-        oldest_cat = min(history, key=lambda c: history[c])
+        used = {c: d for c, d in history.items() if c in categories} or history
+        oldest_cat = min(used, key=lambda c: used[c])
         available_categories = [oldest_cat]
-    category = random.choice(available_categories)
-    subject = random.choice(_SUBJECT_CATEGORIES[category])
+    weights = optimizer.category_weights()
+    w = [weights.get(cat, 1.0) for cat in available_categories]
+    category = random.choices(available_categories, weights=w, k=1)[0]
+    if category not in categories:
+        category = random.choice(list(categories))
+    subject = random.choice(categories[category])
     return subject, category
 
 # Used only as a no-API-key fallback so the pipeline still runs. Broadened so it
@@ -305,7 +433,7 @@ def generate_topic(avoid: list[str] | None = None) -> str:
         choices = [t for t in _FALLBACK_TOPICS if t not in avoid] or _FALLBACK_TOPICS
         return random.choice(choices)
 
-    fmt = random.choice(_CONTENT_FORMATS)
+    fmt = random.choice(_active_formats())
     subject, category = _pick_subject_with_cooldown()
     _record_category(category)
     logger.info("Category: %s | Subject: %s", category, subject)
@@ -337,8 +465,121 @@ def generate_topic(avoid: list[str] | None = None) -> str:
         f"{avoid_block}\n\n"
         "Return ONLY the title text, nothing else."
     )
-    title = generate_text(prompt, temperature=1.05).splitlines()[0].strip().strip('"')
-    return title or random.choice(_FALLBACK_TOPICS)
+    best_title = ""
+    best_total = -1.0
+    attempts = max(1, settings.topic_attempts) if settings.quality_gates else 1
+    for attempt in range(attempts):
+        title = (
+            generate_text(prompt, temperature=1.05).splitlines()[0].strip().strip('"')
+        )
+        if not title:
+            continue
+        if not settings.quality_gates:
+            best_title = title
+            break
+        scores = score_topic(title)
+        total = sum(scores.values()) / max(1, len(scores))
+        logger.info("Topic candidate %d: %r scored %s", attempt + 1, title, scores)
+        if total > best_total:
+            best_title, best_total = title, total
+        if (
+            scores.get("virality", 0) >= settings.min_virality_score
+            and scores.get("emotional_impact", 0) >= settings.min_emotional_impact
+            and scores.get("retention", 0) >= settings.min_retention_prediction
+            and scores.get("monetization", 0) >= settings.min_ctr_prediction
+        ):
+            best_title = title
+            break
+        logger.info("Topic rejected by quality gate; regenerating.")
+    title = best_title or random.choice(_FALLBACK_TOPICS)
+    optimizer.record_generation(title, category, fmt)
+    return title
+
+
+def score_topic(topic: str) -> dict[str, int]:
+    """Score a topic candidate 0-100 on virality, retention, emotion, monetization."""
+    prompt = (
+        "You are a brutally honest YouTube Shorts performance analyst for "
+        f"{_theme_text()}.\n"
+        f'Score this Short topic: "{topic}"\n\n'
+        "Judge against the best-performing Shorts in this niche (16-35, "
+        "English-speaking audience). Be strict — an average topic scores 60-75; "
+        "only genuinely scroll-stopping topics score 85+.\n"
+        "Return ONLY a JSON object with integer keys 0-100:\n"
+        '- "virality": curiosity gap strength + shareability\n'
+        '- "retention": how likely viewers watch to the end\n'
+        '- "emotional_impact": fear/attraction/relatability intensity\n'
+        '- "monetization": advertiser-friendliness + CPM potential\n'
+    )
+    try:
+        data = generate_json(prompt, temperature=0.2)
+        return {
+            k: int(data.get(k, 0))
+            for k in ("virality", "retention", "emotional_impact", "monetization")
+        }
+    except Exception as exc:  # scoring must never break generation
+        logger.warning("Topic scoring failed (%s); accepting candidate.", exc)
+        return {"virality": 100, "retention": 100, "emotional_impact": 100, "monetization": 100}
+
+
+def generate_hooks(topic: str) -> str:
+    """Generate 5 hook candidates with predicted CTR and return the best one."""
+    prompt = (
+        "You are a YouTube Shorts hook specialist for "
+        f"{_theme_text()}.\n"
+        f'Video topic: "{topic}"\n\n'
+        "Write 5 COMPLETELY DIFFERENT opening hooks (max 8 spoken words each). "
+        "Each must deliver an instant shock, bold claim or curiosity gap in the "
+        "first 1-3 words. No greetings, no 'imagine', no slow setups.\n"
+        "For each, predict CTR-style hook quality 0-100 (how many viewers stop "
+        "scrolling). Be strict: average hooks score 60-80; only irresistible "
+        "hooks score 90+.\n"
+        f"Language: {settings.content_language}.\n"
+        'Return ONLY a JSON array of objects: {"hook": str, "score": int}.'
+    )
+    try:
+        data = generate_json(prompt, temperature=1.0)
+        candidates = [
+            (str(item.get("hook", "")).strip(), int(item.get("score", 0)))
+            for item in data
+            if str(item.get("hook", "")).strip()
+        ]
+        if not candidates:
+            return ""
+        hook, score = max(candidates, key=lambda c: c[1])
+        logger.info("Best hook (score %d/%d min): %r", score, settings.min_hook_score, hook)
+        return hook
+    except Exception as exc:
+        logger.warning("Hook generation failed (%s); script will self-hook.", exc)
+        return ""
+
+
+def predict_retention(scenes: list[Scene]) -> int:
+    """Predict average retention % for a script across time segments."""
+    script_text = "\n".join(f"Scene {s.index + 1}: {s.narration}" for s in scenes)
+    prompt = (
+        "You are a brutally honest YouTube Shorts retention analyst.\n"
+        f"Script for a ~20-35 second Short:\n{script_text}\n\n"
+        "Predict what % of viewers are still watching at each stage. Be strict "
+        "and realistic for a small faceless channel.\n"
+        "Return ONLY a JSON object with integer keys 0-100:\n"
+        '"retention_0_3s", "retention_3_10s", "retention_10_20s", "retention_20_35s"'
+    )
+    try:
+        data = generate_json(prompt, temperature=0.2)
+        values = [
+            int(data.get(k, 0))
+            for k in (
+                "retention_0_3s",
+                "retention_3_10s",
+                "retention_10_20s",
+                "retention_20_35s",
+            )
+        ]
+        return round(sum(values) / len(values))
+    except Exception as exc:
+        logger.warning("Retention prediction failed (%s); accepting script.", exc)
+        return 100
 
 
 def generate_script(topic: str) -> list[Scene]:
@@ -347,16 +588,47 @@ def generate_script(topic: str) -> list[Scene]:
     if not settings.gemini_api_key:
         return _fallback_script(topic, n)
 
+    hook = generate_hooks(topic) if settings.quality_gates else ""
+    hook_block = (
+        f'- Scene 1 narration MUST be this pre-selected winning hook: "{hook}" '
+        "(you may only make tiny grammatical adjustments).\n"
+        if hook
+        else ""
+    )
+    if _is_psych_theme():
+        style_line = (
+            "Style: ultra-realistic cinematic photography, emotional human "
+            "subjects, movie-quality dramatic lighting, moody atmosphere, "
+            "shallow depth of field, vertical 9:16, no text.\n"
+        )
+        structure_block = (
+            "- EMOTIONAL TIMELINE across the scenes: 0-2s EXTREME CURIOSITY "
+            "(the hook), 2-8s EMOTIONAL CONNECTION ('this is literally you' — "
+            "describe the viewer's own experience back to them), 8-18s the "
+            "EXPLANATION (the psychological mechanism, named simply), 18-25s "
+            "the TWIST (a counterintuitive reveal that reframes everything), "
+            "final seconds a QUESTION or SHOCK ending.\n"
+        )
+    else:
+        style_line = (
+            "Style: photorealistic cinematic CGI, dark dramatic mood, vertical "
+            "9:16, no text, no people's faces.\n"
+        )
+        structure_block = ""
+
+    duration_text = "20-35" if _is_psych_theme() else "20-25"
     prompt = (
         "You are an elite YouTube Shorts scriptwriter for "
         f"{_theme_text()}.\n\n"
-        f'Write a script for a ~20-25 second vertical Short titled: "{topic}".\n\n'
+        f'Write a script for a ~{duration_text} second vertical Short titled: "{topic}".\n\n'
         "Engineer it for the 2026 Shorts algorithm. Key metrics: average view "
         "duration MUST exceed 80% of video length (the algorithm threshold for "
         "expanded reach), loop rate 1.2x+, and viewed-vs-swiped ratio above 75%. "
         "Every replay counts as a new view, so LOOP STRUCTURE is the #1 priority "
         "after the hook. Hard rules:\n"
         f"- Exactly {n} scenes.\n"
+        f"{hook_block}"
+        f"{structure_block}"
         "- SCENE 1 = THE HOOK (max 8 words). The first 2-3 spoken words must "
         "deliver an instant shock, bold claim or curiosity gap — the algorithm "
         "tests viewer reaction in the first 1-3 seconds. State the most "
@@ -385,8 +657,9 @@ def generate_script(topic: str) -> list[Scene]:
         "true detail incomplete instead.\n"
         "- Every narration line is 1-2 SHORT punchy spoken sentences. NO filler "
         "words, no 'in this video', no calls to like/subscribe. Keep total word "
-        "count VERY low (under 55 words total) — brevity = higher retention %. "
-        "The 20-25 second range has the highest algorithm performance in 2026.\n"
+        f"count VERY low (under {'85' if _is_psych_theme() else '55'} words total) "
+        "— brevity = higher retention %. "
+        f"The {duration_text} second range has the highest algorithm performance in 2026.\n"
         f"- Language: {settings.content_language}.\n"
         "- For each scene write a DETAILED, SPECIFIC AI IMAGE PROMPT (English). "
         "Include: exact subject/action, specific camera angle (e.g. extreme "
@@ -396,8 +669,7 @@ def generate_script(topic: str) -> list[Scene]:
         "from the previous one (different scale, different palette, different "
         "angle) to maintain stimulus density — at least 1 visual change every "
         "2-3 seconds prevents viewer fatigue. "
-        "Style: photorealistic cinematic CGI, dark dramatic mood, vertical 9:16, "
-        "no text, no people's faces.\n"
+        f"{style_line}"
         "- 'on_screen_text': for SCENE 1 this MUST be a bold 2-4 word hook that "
         "captures the video's core shock/question (this will be rendered as a "
         "large overlay to catch silent viewers). For other scenes, a punchy "
@@ -405,24 +677,44 @@ def generate_script(topic: str) -> list[Scene]:
         "Return ONLY a JSON array of objects with keys: "
         '"narration", "image_prompt", "on_screen_text".'
     )
-    data = generate_json(prompt, temperature=0.95)
-    scenes: list[Scene] = []
-    for item in data:
-        narration = str(item.get("narration", "")).strip()
-        image_prompt = str(item.get("image_prompt", "")).strip()
-        if not narration or not image_prompt:
-            continue
-        scenes.append(
-            Scene(
-                index=len(scenes),
-                narration=narration,
-                image_prompt=image_prompt,
-                on_screen_text=str(item.get("on_screen_text", "")).strip(),
+    attempts = max(1, settings.script_attempts) if settings.quality_gates else 1
+    best_scenes: list[Scene] = []
+    best_retention = -1
+    for attempt in range(attempts):
+        data = generate_json(prompt, temperature=0.95)
+        scenes: list[Scene] = []
+        for item in data:
+            narration = str(item.get("narration", "")).strip()
+            image_prompt = str(item.get("image_prompt", "")).strip()
+            if not narration or not image_prompt:
+                continue
+            scenes.append(
+                Scene(
+                    index=len(scenes),
+                    narration=narration,
+                    image_prompt=image_prompt,
+                    on_screen_text=str(item.get("on_screen_text", "")).strip(),
+                )
             )
+        if not scenes:
+            continue
+        if not settings.quality_gates:
+            return scenes
+        retention = predict_retention(scenes)
+        logger.info(
+            "Script attempt %d predicted retention: %d%% (min %d%%)",
+            attempt + 1,
+            retention,
+            settings.min_retention_prediction,
         )
-    if not scenes:
+        if retention > best_retention:
+            best_scenes, best_retention = scenes, retention
+        if retention >= settings.min_retention_prediction:
+            return scenes
+        logger.info("Script below retention gate; regenerating.")
+    if not best_scenes:
         raise ValueError("Script generation returned no usable scenes.")
-    return scenes
+    return best_scenes
 
 
 def generate_metadata(topic: str, narration: str) -> VideoMetadata:

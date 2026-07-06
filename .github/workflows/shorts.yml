@@ -40,6 +40,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Persist self-optimizing state (topic/category history, performance
+      # data) across scheduled runs via a rolling cache.
+      - name: Restore optimizer state
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            output/performance.json
+            output/history.json
+            output/category_history.json
+          key: optimizer-state-${{ github.run_id }}
+          restore-keys: optimizer-state-
+
       - name: Write YouTube client secret
         env:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
@@ -51,6 +63,7 @@ jobs:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           IMAGE_PROVIDER: ${{ vars.IMAGE_PROVIDER || 'gemini' }}
           TTS_PROVIDER: ${{ vars.TTS_PROVIDER || 'edge' }}
           EDGE_TTS_VOICE: ${{ vars.EDGE_TTS_VOICE || 'random' }}
@@ -62,6 +75,24 @@ jobs:
           else
             python -m ai_shorts_factory run
           fi
+
+      # Refresh public stats + winning-pattern weights (skips gracefully
+      # when YOUTUBE_API_KEY is not configured).
+      - name: Self-improvement loop
+        if: always()
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python -m ai_shorts_factory optimize || true
+
+      - name: Save optimizer state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            output/performance.json
+            output/history.json
+            output/category_history.json
+          key: optimizer-state-${{ github.run_id }}
 
       - name: Upload artifacts (debug)
         if: always()

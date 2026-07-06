@@ -76,6 +76,27 @@ def _cmd_upload(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_optimize(args: argparse.Namespace) -> int:
+    """Refresh public stats and print winning patterns + long-form candidates."""
+    from . import optimizer
+
+    optimizer.refresh_stats()
+    print("\nWinning patterns (category performance):")
+    for line in optimizer.winning_patterns():
+        print(f"  {line}")
+    candidates = optimizer.long_form_candidates()
+    if candidates:
+        print("\nLong-form expansion candidates:")
+        for c in candidates:
+            print(
+                f"  {c['views']:>7} views  {c['topic']}  -> {c['recommended']}"
+                f"  (https://youtu.be/{c['video_id']})"
+            )
+    else:
+        print("\nNo long-form expansion candidates yet (needs 1000+ views).")
+    return 0
+
+
 def _cmd_auth(args: argparse.Namespace) -> int:
     """Run the one-time OAuth flow and print the refresh token for CI."""
     from .upload import _load_credentials
@@ -121,6 +142,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_auth = sub.add_parser("auth", help="run YouTube OAuth and print refresh token")
     p_auth.set_defaults(func=_cmd_auth)
+
+    p_opt = sub.add_parser(
+        "optimize", help="refresh video stats and report winning patterns"
+    )
+    p_opt.set_defaults(func=_cmd_optimize)
 
     args = parser.parse_args(argv)
     _setup_logging(args.verbose)
