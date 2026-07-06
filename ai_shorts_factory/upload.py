@@ -103,7 +103,8 @@ def upload_video(project: VideoProject) -> str:
     logger.info("Uploaded: https://youtu.be/%s", video_id)
 
     # Post and pin an engagement comment to boost algorithmic signals.
-    _post_pinned_comment(youtube, video_id, project.topic)
+    pinned = project.metadata.pinned_comment if project.metadata else ""
+    _post_pinned_comment(youtube, video_id, pinned)
 
     return video_id
 
@@ -125,11 +126,15 @@ _COMMENT_TEMPLATES = [
 ]
 
 
-def _post_pinned_comment(youtube, video_id: str, topic: str) -> None:
-    """Post a pinned comment on the video to encourage engagement."""
+def _post_pinned_comment(youtube, video_id: str, comment_text: str = "") -> None:
+    """Post a pinned comment on the video to encourage engagement.
+
+    Prefers a video-specific debate question generated with the metadata;
+    falls back to a random generic template.
+    """
     import random
 
-    comment_text = random.choice(_COMMENT_TEMPLATES)
+    comment_text = comment_text or random.choice(_COMMENT_TEMPLATES)
     try:
         result = youtube.commentThreads().insert(
             part="snippet",

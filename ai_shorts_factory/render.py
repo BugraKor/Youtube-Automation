@@ -40,6 +40,7 @@ def render_video(project: VideoProject) -> Path:
                 clip,
                 zoom_in=(scene.index % 2 == 0),
                 is_hook=(scene.index == 0),
+                is_peak=(scene.index == len(project.scenes) - 2),
             )
             logger.info("Rendered scene %d from image (%.2fs)", scene.index, scene.duration)
         else:

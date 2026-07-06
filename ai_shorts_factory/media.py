@@ -131,12 +131,20 @@ def make_stock_clip(
 
 
 def make_ken_burns_clip(
-    image: Path, duration: float, out_path: Path, *, zoom_in: bool, is_hook: bool = False
+    image: Path,
+    duration: float,
+    out_path: Path,
+    *,
+    zoom_in: bool,
+    is_hook: bool = False,
+    is_peak: bool = False,
 ) -> Path:
     """Render a single image into a vertical clip with a slow zoom/pan.
 
     When *is_hook* is True (scene 0), the zoom starts faster so the very first
     frame has visible movement — research shows static openings get swiped.
+    When *is_peak* is True (the payoff scene), a faster punch-in zoom marks the
+    reveal moment — pro Shorts editors use quick zooms on impactful beats.
     """
     w, h = settings.video_width, settings.video_height
     fps = settings.video_fps
@@ -144,12 +152,17 @@ def make_ken_burns_clip(
     sw, sh = int(w * 1.5), int(h * 1.5)  # upscale to keep the zoom smooth
 
     # Faster zoom across all scenes for higher stimulus density; hook scene
-    # is even faster so frame 0 is never static.
-    step = "0.0028" if is_hook else "0.0018"
-    if zoom_in:
-        zexpr = f"min(zoom+{step},1.18)"
+    # is even faster so frame 0 is never static; peak scene gets a punch-in.
+    if is_hook:
+        step, zmax = "0.0028", "1.18"
+    elif is_peak:
+        step, zmax = "0.0040", "1.24"
     else:
-        zexpr = f"if(eq(on,1),1.18,max(zoom-{step},1.0))"
+        step, zmax = "0.0018", "1.18"
+    if zoom_in or is_peak:
+        zexpr = f"min(zoom+{step},{zmax})"
+    else:
+        zexpr = f"if(eq(on,1),{zmax},max(zoom-{step},1.0))"
 
     grain = "noise=alls=7:allf=t+u," if settings.film_grain else ""
     vf = (

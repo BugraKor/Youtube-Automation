@@ -115,6 +115,7 @@ def create_short(topic: str | None = None) -> VideoProject:
                 "title": project.metadata.title,
                 "description": project.metadata.description,
                 "tags": project.metadata.tags,
+                "pinned_comment": project.metadata.pinned_comment,
             },
             indent=2,
             ensure_ascii=False,
