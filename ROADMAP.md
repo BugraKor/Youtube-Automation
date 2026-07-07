@@ -92,8 +92,14 @@ Legend: ✅ implemented · 🔜 next up · 🗺️ planned
   winners automatically — the channel doubles down on what works with zero
   manual input.
 - State persists across CI runs via a rolling GitHub Actions cache.
-- 🗺️ Remaining: retention-curve level learning via YouTube Analytics API
-  (needs `yt-analytics.readonly` OAuth scope — one-time re-auth).
+- ✅ YouTube Analytics API integration (`analytics.py`, OAuth2 with
+  `yt-analytics.readonly`): per-video audience retention, average view
+  duration, watch time, subscribers gained. `optimize` ranks retention /
+  watch-time / subscriber-conversion leaders, top topics & hooks, best
+  upload hours and best durations; category weights use a composite score
+  (views × retention × subs conversion) so production automatically shifts
+  toward high performers. One-time setup: re-run `ai-shorts-factory auth`
+  and update the `YOUTUBE_REFRESH_TOKEN` secret.
 
 ## Phase 9 — Long-Form Expansion ✅ (detection) / 🗺️ (generation)
 
@@ -139,6 +145,8 @@ Legend: ✅ implemented · 🔜 next up · 🗺️ planned
 
 ## Setup needed from the channel owner
 
-- `YOUTUBE_API_KEY` secret (plain Data API v3 key, public stats only) to
-  activate the self-improvement loop. Everything else runs with existing
-  secrets; without the key the loop skips gracefully.
+- Re-run `python -m ai_shorts_factory auth` once (grants
+  `yt-analytics.readonly`) and update the `YOUTUBE_REFRESH_TOKEN` secret to
+  unlock retention/watch-time/subscriber learning.
+- Optional `YOUTUBE_API_KEY` secret (plain Data API v3 key) as a public-stats
+  fallback. Without either, the loop skips gracefully.

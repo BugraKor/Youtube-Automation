@@ -81,9 +81,22 @@ def _cmd_optimize(args: argparse.Namespace) -> int:
     from . import optimizer
 
     optimizer.refresh_stats()
-    print("\nWinning patterns (category performance):")
-    for line in optimizer.winning_patterns():
-        print(f"  {line}")
+    sections = [
+        ("Winning patterns (category performance)", optimizer.winning_patterns()),
+        ("Top performing topics", optimizer.top_topics()),
+        ("Top performing hooks", optimizer.top_hooks()),
+        ("Retention leaders", optimizer.retention_leaders()),
+        ("Watch time leaders", optimizer.watch_time_leaders()),
+        ("Subscriber conversion leaders", optimizer.subscriber_leaders()),
+        ("Best upload times", optimizer.best_upload_hours()),
+        ("Best video durations", optimizer.best_durations()),
+    ]
+    for title, lines in sections:
+        if not lines:
+            continue
+        print(f"\n{title}:")
+        for line in lines:
+            print(f"  {line}")
     candidates = optimizer.long_form_candidates()
     if candidates:
         print("\nLong-form expansion candidates:")
@@ -98,10 +111,14 @@ def _cmd_optimize(args: argparse.Namespace) -> int:
 
 
 def _cmd_auth(args: argparse.Namespace) -> int:
-    """Run the one-time OAuth flow and print the refresh token for CI."""
-    from .upload import _load_credentials
+    """Run the one-time OAuth flow and print the refresh token for CI.
 
-    creds = _load_credentials()
+    Requests upload + Analytics scopes and forces a fresh consent so the new
+    refresh token also unlocks retention/watch-time/subscriber metrics.
+    """
+    from .upload import ALL_SCOPES, _load_credentials
+
+    creds = _load_credentials(ALL_SCOPES, force_consent=True)
     print("\nAuthorisation successful. Token saved.")
     if creds.refresh_token:
         print("\nStore this as the YOUTUBE_REFRESH_TOKEN secret for CI:\n")

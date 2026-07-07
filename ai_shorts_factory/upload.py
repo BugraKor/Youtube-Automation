@@ -12,19 +12,24 @@ from .models import VideoProject
 logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+# Extra read-only scope for the YouTube Analytics API (retention, watch time,
+# subscribers gained). Re-run `ai-shorts-factory auth` once to grant it.
+ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics.readonly"
+ALL_SCOPES = [*SCOPES, ANALYTICS_SCOPE]
 
 
-def _load_credentials():
+def _load_credentials(scopes: list[str] | None = None, force_consent: bool = False):
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
 
+    scopes = scopes or SCOPES
     token_file = Path(settings.youtube_token_file)
     client_file = Path(settings.youtube_client_secret_file)
     creds = None
 
     # 1. CI / headless: build creds from a stored refresh token.
-    if settings.youtube_refresh_token and client_file.exists():
+    if not force_consent and settings.youtube_refresh_token and client_file.exists():
         info = json.loads(client_file.read_text(encoding="utf-8"))
         data = info.get("installed") or info.get("web") or {}
         creds = Credentials(
@@ -33,14 +38,14 @@ def _load_credentials():
             token_uri=data.get("token_uri", "https://oauth2.googleapis.com/token"),
             client_id=data["client_id"],
             client_secret=data["client_secret"],
-            scopes=SCOPES,
+            scopes=scopes,
         )
         creds.refresh(Request())
         return creds
 
     # 2. Reuse a previously saved token.
-    if token_file.exists():
-        creds = Credentials.from_authorized_user_file(str(token_file), SCOPES)
+    if not force_consent and token_file.exists():
+        creds = Credentials.from_authorized_user_file(str(token_file), scopes)
 
     if creds and creds.valid:
         return creds
@@ -56,7 +61,7 @@ def _load_credentials():
             "Google Cloud Console (OAuth client, type Desktop) and set "
             "YOUTUBE_CLIENT_SECRET_FILE."
         )
-    flow = InstalledAppFlow.from_client_secrets_file(str(client_file), SCOPES)
+    flow = InstalledAppFlow.from_client_secrets_file(str(client_file), scopes)
     creds = flow.run_local_server(port=0)
     token_file.write_text(creds.to_json(), encoding="utf-8")
     return creds
