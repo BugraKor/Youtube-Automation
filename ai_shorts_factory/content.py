@@ -454,6 +454,9 @@ def generate_topic(avoid: list[str] | None = None) -> str:
         "- Use a SPECIFIC number, measurement, or concrete detail when natural.\n"
         "- The title alone should make someone NEED to know what happens next.\n"
         "- 4-8 words, Title Case, no quotes, NO EMOJIS, no clickbait lies.\n"
+        "- Where natural, include a long-tail phrase people actually search "
+        "(3+ words, specific, low competition) so the video also ranks in "
+        "search, not just the Shorts feed.\n"
         "- The title MUST make the viewer feel they'll learn something others "
         "don't know — the #1 share trigger for science content is making "
         "viewers feel intelligent.\n"
@@ -478,7 +481,7 @@ def generate_topic(avoid: list[str] | None = None) -> str:
             best_title = title
             break
         scores = score_topic(title)
-        total = sum(scores.values()) / max(1, len(scores))
+        total = _weighted_topic_score(scores)
         logger.info("Topic candidate %d: %r scored %s", attempt + 1, title, scores)
         if total > best_total:
             best_title, best_total = title, total
@@ -494,6 +497,26 @@ def generate_topic(avoid: list[str] | None = None) -> str:
     title = best_title or random.choice(_FALLBACK_TOPICS)
     optimizer.record_generation(title, category, fmt)
     return title
+
+
+# Monetization counts extra when choosing between candidates: high-RPM topics
+# reach payout faster at the same view count.
+_TOPIC_SCORE_WEIGHTS = {
+    "virality": 1.0,
+    "retention": 1.0,
+    "emotional_impact": 1.0,
+    "monetization": 1.5,
+}
+
+
+def _weighted_topic_score(scores: dict[str, int]) -> float:
+    total_weight = sum(_TOPIC_SCORE_WEIGHTS.get(k, 1.0) for k in scores)
+    if not total_weight:
+        return 0.0
+    return (
+        sum(v * _TOPIC_SCORE_WEIGHTS.get(k, 1.0) for k, v in scores.items())
+        / total_weight
+    )
 
 
 def score_topic(topic: str) -> dict[str, int]:
@@ -735,23 +758,27 @@ def generate_metadata(topic: str, narration: str) -> VideoMetadata:
         f'Video topic: "{topic}"\n'
         f"Narration: {narration}\n\n"
         "Return ONLY a JSON object with keys:\n"
-        '- "title": <=70 chars, curiosity-driven, front-load the hook word; '
-        "title only, no quotes, NO EMOJIS. Use a specific number or detail. "
-        "Serve BOTH browse and search: keep the emotional hook first, then "
-        "include one high-volume search keyword phrase people actually type "
-        "(e.g. 'black hole', 'deep ocean') naturally inside the title.\n"
-        '- "description": Start with a 1-sentence hook. Then 1-2 sentences of '
-        "context. Then a DIRECT engagement question that begs a comment (e.g. "
+        '- "title": 50-60 chars ideal (never over 70), curiosity-driven; '
+        "title only, no quotes, NO EMOJIS. Use a specific number or detail and "
+        "one power word (e.g. 'hidden', 'secret', 'truth', 'never'). Serve "
+        "BOTH browse and search: put the main search keyword phrase in the "
+        "FIRST 3 words, then the emotional hook. Prefer a long-tail keyword "
+        "phrase (3+ words) people actually type.\n"
+        '- "description": The FIRST 2 sentences must contain the main search '
+        "keyword naturally — only they appear in search results. Sentence 1 is "
+        "the hook, sentence 2 adds context. Then a DIRECT engagement question "
+        "that begs a comment (e.g. "
         "'Would you survive this? Tell us in the comments 👇' or 'What would you "
         "do first? Drop your answer below'). End with 4-5 relevant hashtags "
         "including #shorts. Include 2-3 hashtags in Turkish that match the "
         "topic (e.g. #bilim #uzay #evren #ger\u00e7ekler) to capture the Turkish "
         "audience alongside the global English audience.\n"
-        '- "tags": array of 18-20 lowercase keyword strings. Mix broad English '
-        "search terms (e.g. 'science facts', 'space', 'what if') with specific "
-        "English terms AND 3-4 Turkish equivalents (e.g. 'bilim', 'uzay', "
-        "'ilgin\u00e7 bilgiler', 'k\u0131sa video') to maximise discoverability "
-        "across both audiences.\n"
+        '- "tags": array of 15-18 lowercase keyword strings, structured as: '
+        "3-5 BROAD English terms (e.g. 'psychology', 'science facts'), then "
+        "7-10 LONG-TAIL English phrases of 3+ words that people actually "
+        "search (specific, low competition — e.g. 'why you overthink at "
+        "night'), then 3-4 Turkish equivalents (e.g. 'psikoloji', 'ilgin\u00e7 "
+        "bilgiler') to capture both audiences.\n"
         '- "pinned_comment": ONE short provocative question about THIS video, '
         "crafted to start a debate in the comments — target a detail people "
         "will disagree about or want to answer from their own experience. "
