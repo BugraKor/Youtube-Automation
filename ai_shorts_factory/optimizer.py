@@ -156,8 +156,8 @@ def _entry_score(e: dict[str, Any]) -> float:
     score = views
     retention = e.get("retention_pct")
     if retention is not None:
-        # 80% retention doubles a view's value; 40% keeps it at 1x; floor 0.5x.
-        score *= max(0.5, float(retention) / 40.0)
+        # 80% retention doubles a view's value; 40% keeps it at 1x; floor 0.25x.
+        score *= max(0.25, float(retention) / 40.0)
     subs = e.get("subs_gained")
     if subs is not None and views > 0:
         # Reward subscriber conversion: +10% per sub/1k views, capped at 2x.
@@ -169,8 +169,8 @@ def category_weights() -> dict[str, float]:
     """Return {category: weight} learned from past performance.
 
     Weight = category's average composite score (views x retention x subs
-    conversion) relative to the overall average, clamped to [0.5, 3.0] so no
-    category is ever fully starved and winners are boosted up to 3x.
+    conversion) relative to the overall average, clamped to [0.3, 4.0] so no
+    category is ever fully starved and winners are boosted up to 4x.
     """
     entries = [e for e in _load() if e.get("category") and "views" in e]
     if len(entries) < 5:  # not enough signal yet
@@ -186,7 +186,7 @@ def category_weights() -> dict[str, float]:
     weights: dict[str, float] = {}
     for cat, scores in by_cat.items():
         avg = sum(scores) / len(scores)
-        weights[cat] = min(3.0, max(0.5, avg / overall))
+        weights[cat] = min(4.0, max(0.3, avg / overall))
     return weights
 
 
