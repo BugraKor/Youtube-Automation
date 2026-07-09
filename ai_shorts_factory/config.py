@@ -93,7 +93,7 @@ class Settings:
         default_factory=lambda: _int(os.getenv("MIN_HOOK_SCORE"), 90)
     )
     min_retention_prediction: int = field(
-        default_factory=lambda: _int(os.getenv("MIN_RETENTION_PREDICTION"), 75)
+        default_factory=lambda: _int(os.getenv("MIN_RETENTION_PREDICTION"), 80)
     )
     min_ctr_prediction: int = field(
         default_factory=lambda: _int(os.getenv("MIN_CTR_PREDICTION"), 70)
