@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 PERFORMANCE_FILE = OUTPUT_DIR / "performance.json"
 
+# YouTube Analytics data lags 24-72h behind real time. Learning functions only
+# analyse videos uploaded at least this many days ago so decisions are never
+# based on partial metrics of freshly uploaded videos.
+STATS_MATURITY_DAYS = 3
+
 # View milestones that qualify a Short topic for long-form expansion.
 LONG_FORM_TIERS = [(10000, "10 minute video"), (5000, "8 minute video"), (1000, "5 minute video")]
 
@@ -123,24 +128,32 @@ def refresh_stats() -> list[dict[str, Any]]:
 
     from googleapiclient.discovery import build
 
-    youtube = build("youtube", "v3", developerKey=settings.youtube_api_key)
     stats: dict[str, dict[str, Any]] = {}
-    for i in range(0, len(ids), 50):
-        response = (
-            youtube.videos()
-            .list(part="statistics", id=",".join(ids[i : i + 50]))
-            .execute()
-        )
-        for item in response.get("items", []):
-            stats[item["id"]] = item.get("statistics", {})
+    try:
+        youtube = build("youtube", "v3", developerKey=settings.youtube_api_key)
+        for i in range(0, len(ids), 50):
+            response = (
+                youtube.videos()
+                .list(part="statistics", id=",".join(ids[i : i + 50]))
+                .execute()
+            )
+            for item in response.get("items", []):
+                stats[item["id"]] = item.get("statistics", {})
+    except Exception as exc:
+        logger.warning("Data API stats refresh failed: %s", exc)
+        return entries
 
     for entry in entries:
         s = stats.get(entry.get("video_id", ""))
         if not s:
             continue
-        entry["views"] = int(s.get("viewCount", 0))
-        entry["likes"] = int(s.get("likeCount", 0))
-        entry["comments"] = int(s.get("commentCount", 0))
+        for field_name, api_key in (
+            ("views", "viewCount"),
+            ("likes", "likeCount"),
+            ("comments", "commentCount"),
+        ):
+            if _valid_number(s.get(api_key)):
+                entry[field_name] = int(float(s[api_key]))
         entry["stats_updated_at"] = now
     _save(entries)
     return entries
@@ -152,14 +165,14 @@ def _entry_score(e: dict[str, Any]) -> float:
     views weighted by retention quality and subscriber conversion when
     Analytics data is available; plain views otherwise.
     """
-    views = float(e.get("views", 0))
+    views = float(e["views"]) if _valid_number(e.get("views")) else 0.0
     score = views
     retention = e.get("retention_pct")
-    if retention is not None:
+    if _valid_number(retention):
         # 80% retention doubles a view's value; 40% keeps it at 1x; floor 0.25x.
         score *= max(0.25, float(retention) / 40.0)
     subs = e.get("subs_gained")
-    if subs is not None and views > 0:
+    if _valid_number(subs) and views > 0:
         # Reward subscriber conversion: +10% per sub/1k views, capped at 2x.
         score *= min(2.0, 1.0 + (float(subs) / views) * 100.0)
     return score
@@ -172,7 +185,11 @@ def category_weights() -> dict[str, float]:
     conversion) relative to the overall average, clamped to [0.3, 4.0] so no
     category is ever fully starved and winners are boosted up to 4x.
     """
-    entries = [e for e in _load() if e.get("category") and "views" in e]
+    entries = [
+        e
+        for e in _load()
+        if e.get("category") and _valid_number(e.get("views")) and _is_mature(e)
+    ]
     if len(entries) < 5:  # not enough signal yet
         return {}
     by_cat: dict[str, list[float]] = {}
@@ -188,6 +205,37 @@ def category_weights() -> dict[str, float]:
         avg = sum(scores) / len(scores)
         weights[cat] = min(4.0, max(0.3, avg / overall))
     return weights
+
+
+# Injected into the topic/hook/script prompts when the latest measurable video
+# failed to hold the audience.
+RETENTION_FEEDBACK_THRESHOLD = 80.0
+_RETENTION_FEEDBACK = (
+    "[OPTIMIZATION] The previous video failed to hold the audience "
+    "(retention below 80%). Make the opening hook shorter and more dramatic, "
+    "and increase the visual pace: every scene's image must change subject, "
+    "scale or palette more aggressively."
+)
+
+
+def retention_feedback() -> str:
+    """Return an LLM prompt addendum when the latest measured video underperformed.
+
+    Looks at the most recently uploaded video that is mature enough
+    (>= STATS_MATURITY_DAYS old) to have complete Analytics data. Returns an
+    empty string when retention was fine or no data is available.
+    """
+    entries = [
+        e
+        for e in _with_stats()
+        if _valid_number(e.get("retention_pct"))
+    ]
+    if not entries:
+        return ""
+    latest = max(entries, key=lambda e: str(e.get("uploaded_at", "")))
+    if float(latest["retention_pct"]) < RETENTION_FEEDBACK_THRESHOLD:
+        return _RETENTION_FEEDBACK
+    return ""
 
 
 def winning_patterns() -> list[str]:
@@ -214,8 +262,33 @@ def winning_patterns() -> list[str]:
     return lines
 
 
+def _is_mature(e: dict[str, Any]) -> bool:
+    """True when the entry's video is old enough for its Analytics data to be complete."""
+    uploaded = e.get("uploaded_at")
+    if not uploaded:
+        return False
+    try:
+        uploaded_dt = dt.datetime.fromisoformat(str(uploaded))
+    except ValueError:
+        return False
+    return dt.datetime.now() - uploaded_dt >= dt.timedelta(days=STATS_MATURITY_DAYS)
+
+
+def _valid_number(v: Any) -> bool:
+    """True for a real, finite number (rejects None, NaN, inf, non-numeric)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return False
+    return f == f and f not in (float("inf"), float("-inf"))
+
+
 def _with_stats() -> list[dict[str, Any]]:
-    return [e for e in _load() if "views" in e]
+    return [
+        e
+        for e in _load()
+        if _valid_number(e.get("views")) and _is_mature(e)
+    ]
 
 
 def _leaders(key: str, label: str, fmt: str = "{:.1f}") -> list[str]:

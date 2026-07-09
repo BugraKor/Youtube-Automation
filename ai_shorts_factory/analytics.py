@@ -15,6 +15,26 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
+def _to_int(v: Any) -> int | None:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f != f or f in (float("inf"), float("-inf")):
+        return None
+    return int(f)
+
+
+def _to_float(v: Any) -> float | None:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f != f or f in (float("inf"), float("-inf")):
+        return None
+    return f
+
 # Per-video metrics pulled from the Analytics API.
 _METRICS = (
     "views,likes,comments,estimatedMinutesWatched,"
@@ -74,14 +94,18 @@ def fetch_video_analytics(video_ids: list[str]) -> dict[str, dict[str, Any]]:
             vid = str(data.get("video", ""))
             if not vid:
                 continue
-            results[vid] = {
-                "views": int(data.get("views", 0)),
-                "likes": int(data.get("likes", 0)),
-                "comments": int(data.get("comments", 0)),
-                "watch_minutes": float(data.get("estimatedMinutesWatched", 0)),
-                "avg_view_duration": float(data.get("averageViewDuration", 0)),
-                "retention_pct": float(data.get("averageViewPercentage", 0)),
-                "subs_gained": int(data.get("subscribersGained", 0)),
+            metrics = {
+                "views": _to_int(data.get("views")),
+                "likes": _to_int(data.get("likes")),
+                "comments": _to_int(data.get("comments")),
+                "watch_minutes": _to_float(data.get("estimatedMinutesWatched")),
+                "avg_view_duration": _to_float(data.get("averageViewDuration")),
+                "retention_pct": _to_float(data.get("averageViewPercentage")),
+                "subs_gained": _to_int(data.get("subscribersGained")),
             }
+            # Drop metrics the API has not processed yet (None/NaN) instead of
+            # storing bogus zeros; the rest of the pipeline treats missing keys
+            # gracefully.
+            results[vid] = {k: v for k, v in metrics.items() if v is not None}
     logger.info("Fetched Analytics metrics for %d/%d videos.", len(results), len(video_ids))
     return results

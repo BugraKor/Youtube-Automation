@@ -465,7 +465,8 @@ def generate_topic(avoid: list[str] | None = None) -> str:
         "  narratives, mystery stories, or any non-factual entertainment content.\n"
         "  Stay strictly within real science, real phenomena, real facts.\n"
         f"- Language: {settings.content_language}.\n"
-        f"{avoid_block}\n\n"
+        f"{avoid_block}\n"
+        f"{_retention_feedback_block()}\n"
         "Return ONLY the title text, nothing else."
     )
     best_title = ""
@@ -545,6 +546,16 @@ def score_topic(topic: str) -> dict[str, int]:
         return {"virality": 100, "retention": 100, "emotional_impact": 100, "monetization": 100}
 
 
+def _retention_feedback_block() -> str:
+    """Prompt addendum from the self-learning loop (empty when performance is fine)."""
+    try:
+        feedback = optimizer.retention_feedback()
+    except Exception as exc:  # learning must never break generation
+        logger.warning("Retention feedback unavailable: %s", exc)
+        return ""
+    return f"\n{feedback}\n" if feedback else ""
+
+
 def generate_hooks(topic: str) -> str:
     """Generate 5 hook candidates with predicted CTR and return the best one."""
     prompt = (
@@ -558,6 +569,7 @@ def generate_hooks(topic: str) -> str:
         "scrolling). Be strict: average hooks score 60-80; only irresistible "
         "hooks score 90+.\n"
         f"Language: {settings.content_language}.\n"
+        f"{_retention_feedback_block()}"
         'Return ONLY a JSON array of objects: {"hook": str, "score": int}.'
     )
     try:
@@ -696,7 +708,8 @@ def generate_script(topic: str) -> list[Scene]:
         "- 'on_screen_text': for SCENE 1 this MUST be a bold 2-4 word hook that "
         "captures the video's core shock/question (this will be rendered as a "
         "large overlay to catch silent viewers). For other scenes, a punchy "
-        "2-4 word caption that adds a micro-payoff even on mute.\n\n"
+        "2-4 word caption that adds a micro-payoff even on mute.\n"
+        f"{_retention_feedback_block()}\n"
         "Return ONLY a JSON array of objects with keys: "
         '"narration", "image_prompt", "on_screen_text".'
     )
