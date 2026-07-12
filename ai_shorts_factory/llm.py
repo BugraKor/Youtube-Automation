@@ -16,6 +16,14 @@ _client_cache: dict[str, Any] = {}
 
 _RETRYABLE = ("429", "500", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "INTERNAL")
 
+# A daily free-tier quota (PerDay) cannot be waited out within a run; switch to
+# the fallback model (separate quota bucket) instead of retrying.
+_DAILY_QUOTA_MARKER = "PerDay"
+
+# Once the primary model's daily quota is exhausted, stick to the fallback for
+# the rest of the process to avoid burning retries on guaranteed 429s.
+_active_model_override: str | None = None
+
 
 def _get_client():
     settings.validate_text()
@@ -33,12 +41,14 @@ def generate_text(prompt: str, *, temperature: float = 0.9, retries: int = 4) ->
     """Return a plain-text completion from Gemini, retrying transient errors."""
     from google.genai import types
 
+    global _active_model_override
     client = _get_client()
     last_err: Exception | None = None
     for attempt in range(retries):
+        model = _active_model_override or settings.gemini_text_model
         try:
             response = client.models.generate_content(
-                model=settings.gemini_text_model,
+                model=model,
                 contents=prompt,
                 config=types.GenerateContentConfig(temperature=temperature),
             )
@@ -48,6 +58,18 @@ def generate_text(prompt: str, *, temperature: float = 0.9, retries: int = 4) ->
             if not any(code in msg for code in _RETRYABLE):
                 raise
             last_err = exc
+            if (
+                _DAILY_QUOTA_MARKER in msg
+                and _active_model_override is None
+                and settings.gemini_fallback_text_model
+                and model != settings.gemini_fallback_text_model
+            ):
+                _active_model_override = settings.gemini_fallback_text_model
+                logger.warning(
+                    "Daily quota exhausted for %s; falling back to %s.",
+                    model, _active_model_override,
+                )
+                continue
             delay = 5 * (attempt + 1)
             logger.warning(
                 "Gemini transient error (attempt %d/%d), retrying in %ds: %s",
