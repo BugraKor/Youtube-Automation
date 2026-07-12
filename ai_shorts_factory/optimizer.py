@@ -210,6 +210,13 @@ def category_weights() -> dict[str, float]:
 # Injected into the topic/hook/script prompts when the latest measurable video
 # failed to hold the audience.
 RETENTION_FEEDBACK_THRESHOLD = 80.0
+SWIPE_AWAY_THRESHOLD = 50.0
+_URGENT_HOOK_FEEDBACK = (
+    "[URGENT_HOOK_OPTIMIZATION] Over half of viewers swiped away within the "
+    "first seconds of the previous video. Make the hook 2x more dramatic: a "
+    "shocking, high-stakes statement in the first 3 words, and the single most "
+    "jaw-dropping visual of the whole video in the very first frame."
+)
 _RETENTION_FEEDBACK = (
     "[OPTIMIZATION] The previous video failed to hold the audience "
     "(retention below 80%). Make the opening hook shorter and more dramatic, "
@@ -233,6 +240,9 @@ def retention_feedback() -> str:
     if not entries:
         return ""
     latest = max(entries, key=lambda e: str(e.get("uploaded_at", "")))
+    swipe = latest.get("swipe_away_pct")
+    if _valid_number(swipe) and float(swipe) > SWIPE_AWAY_THRESHOLD:
+        return _URGENT_HOOK_FEEDBACK
     if float(latest["retention_pct"]) < RETENTION_FEEDBACK_THRESHOLD:
         return _RETENTION_FEEDBACK
     return ""

@@ -154,7 +154,7 @@ def make_ken_burns_clip(
     # Faster zoom across all scenes for higher stimulus density; hook scene
     # is even faster so frame 0 is never static; peak scene gets a punch-in.
     if is_hook:
-        step, zmax = "0.0028", "1.18"
+        step, zmax = "0.0042", "1.22"
     elif is_peak:
         step, zmax = "0.0040", "1.24"
     else:
