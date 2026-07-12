@@ -44,6 +44,13 @@ class Settings:
     gemini_text_model: str = field(
         default_factory=lambda: os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-flash")
     )
+    # Used when the primary model's daily free-tier quota is exhausted
+    # (separate quota bucket). Set to "" to disable the fallback.
+    gemini_fallback_text_model: str = field(
+        default_factory=lambda: os.getenv(
+            "GEMINI_FALLBACK_TEXT_MODEL", "gemini-2.5-flash-lite"
+        )
+    )
 
     # Image generation
     image_provider: str = field(
