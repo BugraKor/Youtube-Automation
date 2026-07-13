@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from pathlib import Path
 
 from ..config import settings
@@ -28,6 +29,8 @@ _EDGE_VOICE_POOL = [
     "en-AU-WilliamNeural",   # Australian, distinct
     "en-US-AndrewNeural",    # calm, narrator-like
 ]
+_EDGE_MAX_ATTEMPTS = 3
+_EDGE_RETRY_BASE_SECONDS = 2
 
 
 def synthesize(text: str, out_path: Path) -> list[WordTiming]:
@@ -60,27 +63,53 @@ def pick_voice_for_video() -> str:
 def _edge(text: str, out_path: Path) -> list[WordTiming]:
     import edge_tts  # lazy import
 
-    words: list[WordTiming] = []
     voice = _session_voice or pick_voice_for_video()
+    last_error: Exception | None = None
 
-    async def _run() -> None:
-        rate = settings.tts_rate
-        communicate = edge_tts.Communicate(
-            text, voice, rate=rate, boundary="WordBoundary"
-        )
-        with open(out_path, "wb") as fh:
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    fh.write(chunk["data"])
-                elif chunk["type"] == "WordBoundary":
-                    start = chunk["offset"] / 1e7
-                    end = start + chunk["duration"] / 1e7
-                    words.append(WordTiming(text=chunk["text"], start=start, end=end))
+    for attempt in range(1, _EDGE_MAX_ATTEMPTS + 1):
+        words: list[WordTiming] = []
 
-    asyncio.run(_run())
-    if not out_path.exists() or out_path.stat().st_size == 0:
-        raise RuntimeError("edge-tts produced no audio.")
-    return words
+        async def _run() -> None:
+            communicate = edge_tts.Communicate(
+                text, voice, rate=settings.tts_rate, boundary="WordBoundary"
+            )
+            with open(out_path, "wb") as fh:
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        fh.write(chunk["data"])
+                    elif chunk["type"] == "WordBoundary":
+                        start = chunk["offset"] / 1e7
+                        end = start + chunk["duration"] / 1e7
+                        words.append(
+                            WordTiming(text=chunk["text"], start=start, end=end)
+                        )
+
+        try:
+            if out_path.exists():
+                out_path.unlink()
+            asyncio.run(_run())
+            if not out_path.exists() or out_path.stat().st_size == 0:
+                raise RuntimeError("edge-tts produced no audio.")
+            return words
+        except Exception as exc:  # noqa: BLE001 - remote service is transient
+            last_error = exc
+            if out_path.exists():
+                out_path.unlink()
+            if attempt == _EDGE_MAX_ATTEMPTS:
+                break
+            delay = _EDGE_RETRY_BASE_SECONDS * attempt
+            logger.warning(
+                "Edge TTS failed (attempt %d/%d), retrying in %ds: %s",
+                attempt,
+                _EDGE_MAX_ATTEMPTS,
+                delay,
+                exc,
+            )
+            time.sleep(delay)
+
+    raise RuntimeError(
+        f"Edge TTS failed after {_EDGE_MAX_ATTEMPTS} attempts: {last_error}"
+    ) from last_error
 
 
 def _elevenlabs(text: str, out_path: Path) -> list[WordTiming]:
