@@ -37,7 +37,7 @@ def _to_float(v: Any) -> float | None:
 
 # Per-video metrics pulled from the Analytics API.
 _METRICS = (
-    "views,likes,comments,estimatedMinutesWatched,"
+    "views,engagedViews,likes,comments,estimatedMinutesWatched,"
     "averageViewDuration,averageViewPercentage,subscribersGained"
 )
 _START_DATE = "2020-01-01"
@@ -96,6 +96,7 @@ def fetch_video_analytics(video_ids: list[str]) -> dict[str, dict[str, Any]]:
                 continue
             metrics = {
                 "views": _to_int(data.get("views")),
+                "engaged_views": _to_int(data.get("engagedViews")),
                 "likes": _to_int(data.get("likes")),
                 "comments": _to_int(data.get("comments")),
                 "watch_minutes": _to_float(data.get("estimatedMinutesWatched")),
@@ -107,5 +108,12 @@ def fetch_video_analytics(video_ids: list[str]) -> dict[str, dict[str, Any]]:
             # storing bogus zeros; the rest of the pipeline treats missing keys
             # gracefully.
             results[vid] = {k: v for k, v in metrics.items() if v is not None}
+            views = results[vid].get("views")
+            engaged = results[vid].get("engaged_views")
+            if views and engaged is not None:
+                # % of impressions swiped away before the video counted as viewed.
+                results[vid]["swipe_away_pct"] = round(
+                    max(0.0, 100.0 * (1.0 - engaged / views)), 2
+                )
     logger.info("Fetched Analytics metrics for %d/%d videos.", len(results), len(video_ids))
     return results
