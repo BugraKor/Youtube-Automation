@@ -63,6 +63,7 @@ def pick_voice_for_video() -> str:
 def _edge(text: str, out_path: Path) -> list[WordTiming]:
     import edge_tts  # lazy import
 
+    global _session_voice  # noqa: PLW0603
     voice = _session_voice or pick_voice_for_video()
     last_error: Exception | None = None
 
@@ -98,11 +99,16 @@ def _edge(text: str, out_path: Path) -> list[WordTiming]:
             if attempt == _EDGE_MAX_ATTEMPTS:
                 break
             delay = _EDGE_RETRY_BASE_SECONDS * attempt
+            fallbacks = [v for v in _EDGE_VOICE_POOL if v != voice]
+            if attempt >= 2 and fallbacks:
+                voice = random.choice(fallbacks)
+                _session_voice = voice  # keep later scenes on the same voice
             logger.warning(
-                "Edge TTS failed (attempt %d/%d), retrying in %ds: %s",
+                "Edge TTS failed (attempt %d/%d), retrying in %ds with voice %s: %s",
                 attempt,
                 _EDGE_MAX_ATTEMPTS,
                 delay,
+                voice,
                 exc,
             )
             time.sleep(delay)
