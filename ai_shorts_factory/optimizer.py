@@ -248,6 +248,22 @@ def retention_feedback() -> str:
     return ""
 
 
+def winning_video() -> dict[str, Any] | None:
+    """The mature video with the best retention x views composite score.
+
+    Anchor for idea farming: new concepts are generated strictly within this
+    video's sub-niche. Returns None when no mature video has full stats.
+    """
+    entries = [
+        e
+        for e in _with_stats()
+        if _valid_number(e.get("retention_pct")) and float(e.get("views", 0)) > 0
+    ]
+    if not entries:
+        return None
+    return max(entries, key=_entry_score)
+
+
 def winning_patterns() -> list[str]:
     """Human-readable report of category performance vs. the overall average."""
     entries = [e for e in _load() if e.get("category") and "views" in e]

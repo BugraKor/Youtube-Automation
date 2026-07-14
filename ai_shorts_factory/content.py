@@ -53,8 +53,19 @@ _PSYCH_IDENTITY = (
     "scientifically grounded but emotionally charged"
 )
 
+# Locked winning niche: space, astrophysics and cosmic dread — the sub-niche
+# with the channel's highest retention and view counts.
+_COSMIC_IDENTITY = (
+    "a faceless, cinematic space and astrophysics channel built on COSMIC "
+    "DREAD: the terrifying scale of the universe, black holes, dying stars, "
+    "the Great Filter, cosmic silence, the Fermi paradox and ultimate "
+    "scientific 'What if's. Dark, ominous, awe-inducing, scientifically "
+    "grounded but dramatic"
+)
+
 THEME_DESCRIPTIONS = {
-    # Default theme: viral psychology (fastest monetization niche).
+    # Default theme: the channel's proven winning niche.
+    "cosmic-dread": _COSMIC_IDENTITY,
     "viral-psychology": _PSYCH_IDENTITY,
     # Umbrella theme: broad science/curiosity subjects, single cohesive tone.
     "mixed-curiosity": _CHANNEL_IDENTITY,
@@ -314,7 +325,27 @@ _PSYCH_SUBJECT_CATEGORIES: dict[str, list[str]] = {
 
 
 def _is_psych_theme() -> bool:
-    return settings.content_theme == "viral-psychology"
+    return settings.content_theme == "viral-psychology" and not settings.niche_lock
+
+
+# Categories allowed while the niche lock is active — strictly the cosmic
+# sub-niche. No psychology, habits, history or fiction drift.
+_COSMIC_CATEGORIES = ("space", "physics", "scale", "unexplained")
+
+# Hardcoded emergency directive injected into every LLM prompt while the
+# niche lock is active.
+_NICHE_LOCK_DIRECTIVE = (
+    "[NICHE_LOCK] CRITICAL: You are a space, astrophysics and cosmic dread "
+    "channel. You must NEVER generate content about daily habits, psychology, "
+    "self-improvement, relationships, history trivia, or random creepypastas "
+    "and fiction stories. Every concept MUST be about space, the cosmos, "
+    "astrophysics, cosmic-scale existential dread or hard scientific "
+    "'What if's. Any off-niche idea is an automatic failure."
+)
+
+
+def _niche_lock_block() -> str:
+    return f"\n{_NICHE_LOCK_DIRECTIVE}\n" if settings.niche_lock else ""
 
 
 def _active_formats() -> list[str]:
@@ -322,7 +353,11 @@ def _active_formats() -> list[str]:
 
 
 def _active_categories() -> dict[str, list[str]]:
-    return _PSYCH_SUBJECT_CATEGORIES if _is_psych_theme() else _SUBJECT_CATEGORIES
+    if _is_psych_theme():
+        return _PSYCH_SUBJECT_CATEGORIES
+    if settings.niche_lock:
+        return {c: _SUBJECT_CATEGORIES[c] for c in _COSMIC_CATEGORIES}
+    return _SUBJECT_CATEGORIES
 
 
 # Flat list for backwards compatibility.
@@ -417,7 +452,77 @@ _FALLBACK_TOPICS = [
 
 
 def _theme_text() -> str:
+    if settings.niche_lock:
+        return _COSMIC_IDENTITY
     return THEME_DESCRIPTIONS.get(settings.content_theme, settings.content_theme)
+
+
+def idea_farming(avoid: list[str] | None = None) -> str:
+    """Generate 5 spin-off concepts anchored to the winning video; pick the best.
+
+    Reads ``output/performance.json`` (via the optimizer) for the video with
+    the highest retention x views composite, then forces Gemini to produce 5
+    concepts strictly inside that video's exact sub-niche, each scored for
+    virality potential. Returns the highest-scoring title, or "" when there is
+    no winning video / the call fails (caller falls back to normal selection).
+    """
+    try:
+        winner = optimizer.winning_video()
+    except Exception as exc:  # learning must never break generation
+        logger.warning("Idea farming: winning video lookup failed: %s", exc)
+        return ""
+    if not winner:
+        return ""
+    avoid = avoid or []
+    avoid_block = ""
+    if avoid:
+        avoid_block = (
+            "\nDo NOT repeat or closely resemble any of these recent titles:\n- "
+            + "\n- ".join(avoid[-25:])
+        )
+    retention = winner.get("retention_pct")
+    views = winner.get("views")
+    prompt = (
+        f"You are a viral YouTube Shorts strategist for {_theme_text()}.\n"
+        f"{_niche_lock_block()}\n"
+        "IDEA FARMING — the channel's proven WINNING video is:\n"
+        f'- Title: "{winner.get("topic", "")}"\n'
+        f"- Retention: {retention}% | Views: {views}\n"
+        f"- Hook: \"{winner.get('hook', '')}\"\n\n"
+        "Generate exactly 5 NEW spin-off video concepts that stay STRICTLY "
+        "inside the exact same sub-niche as this winning video (same theme, "
+        "same emotional register, different specific angle each). Do NOT "
+        "drift into psychology, history, habits, fiction or any other niche.\n"
+        "For each concept score its VIRALITY POTENTIAL 0-100 (curiosity gap "
+        "strength + scroll-stop power + shareability). Be strict: average "
+        "concepts score 60-75; only genuinely irresistible ones score 85+.\n"
+        "Titles: 4-8 words, Title Case, no quotes, NO EMOJIS, front-load the "
+        "most shocking word.\n"
+        f"Language: {settings.content_language}.\n"
+        f"{avoid_block}\n"
+        'Return ONLY a JSON array of objects: {"title": str, "virality": int}.'
+    )
+    try:
+        data = generate_json(prompt, temperature=0.9)
+        candidates = [
+            (str(item.get("title", "")).strip().strip('"'), int(item.get("virality", 0)))
+            for item in data
+            if str(item.get("title", "")).strip()
+        ]
+        if not candidates:
+            return ""
+        title, score = max(candidates, key=lambda c: c[1])
+        logger.info(
+            "Idea farming: %d concepts from winner %r; best %r (virality %d)",
+            len(candidates),
+            winner.get("topic"),
+            title,
+            score,
+        )
+        return title
+    except Exception as exc:
+        logger.warning("Idea farming failed (%s); using standard topic path.", exc)
+        return ""
 
 
 def generate_topic(avoid: list[str] | None = None) -> str:
@@ -432,6 +537,12 @@ def generate_topic(avoid: list[str] | None = None) -> str:
         logger.warning("No GEMINI_API_KEY set; using fallback topic list.")
         choices = [t for t in _FALLBACK_TOPICS if t not in avoid] or _FALLBACK_TOPICS
         return random.choice(choices)
+
+    if settings.niche_lock:
+        farmed = idea_farming(avoid)
+        if farmed:
+            optimizer.record_generation(farmed, "space", "idea-farming spin-off")
+            return farmed
 
     fmt = random.choice(_active_formats())
     subject, category = _pick_subject_with_cooldown()
@@ -466,6 +577,7 @@ def generate_topic(avoid: list[str] | None = None) -> str:
         "  Stay strictly within real science, real phenomena, real facts.\n"
         f"- Language: {settings.content_language}.\n"
         f"{avoid_block}\n"
+        f"{_niche_lock_block()}"
         f"{_retention_feedback_block()}\n"
         "Return ONLY the title text, nothing else."
     )
@@ -573,6 +685,7 @@ def generate_hooks(topic: str) -> str:
         "scrolling). Be strict: average hooks score 60-80; only irresistible "
         "hooks score 90+.\n"
         f"Language: {settings.content_language}.\n"
+        f"{_niche_lock_block()}"
         f"{_retention_feedback_block()}"
         'Return ONLY a JSON array of objects: {"hook": str, "score": int}.'
     )
@@ -715,6 +828,7 @@ def generate_script(topic: str) -> list[Scene]:
         "captures the video's core shock/question (this will be rendered as a "
         "large overlay to catch silent viewers). For other scenes, a punchy "
         "2-4 word caption that adds a micro-payoff even on mute.\n"
+        f"{_niche_lock_block()}"
         f"{_retention_feedback_block()}\n"
         "Return ONLY a JSON array of objects with keys: "
         '"narration", "image_prompt", "on_screen_text".'
