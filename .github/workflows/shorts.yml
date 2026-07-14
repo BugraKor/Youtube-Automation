@@ -68,6 +68,8 @@ jobs:
           TTS_PROVIDER: ${{ vars.TTS_PROVIDER || 'edge' }}
           EDGE_TTS_VOICE: ${{ vars.EDGE_TTS_VOICE || 'random' }}
           USE_STOCK_VIDEO: "true"
+          CONTENT_THEME: ${{ vars.CONTENT_THEME || 'cosmic-dread' }}
+          NICHE_LOCK: ${{ vars.NICHE_LOCK || 'true' }}
           YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'public' }}
         run: |
           if [ -n "${{ github.event.inputs.topic }}" ]; then

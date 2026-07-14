@@ -76,7 +76,12 @@ class Settings:
 
     # Content
     content_theme: str = field(
-        default_factory=lambda: os.getenv("CONTENT_THEME", "viral-psychology")
+        default_factory=lambda: os.getenv("CONTENT_THEME", "cosmic-dread")
+    )
+    # Niche lock: hard-constrain generation to the channel's winning
+    # space/cosmic-dread sub-niche (anti topic-drift).
+    niche_lock: bool = field(
+        default_factory=lambda: _bool(os.getenv("NICHE_LOCK"), True)
     )
     content_language: str = field(
         default_factory=lambda: os.getenv("CONTENT_LANGUAGE", "en")
