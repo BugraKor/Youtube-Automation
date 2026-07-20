@@ -31,6 +31,49 @@ STATS_MATURITY_DAYS = 3
 # View milestones that qualify a Short topic for long-form expansion.
 LONG_FORM_TIERS = [(10000, "10 minute video"), (5000, "8 minute video"), (1000, "5 minute video")]
 
+# The two daily publish slots (see .github/workflows/shorts.yml). Each slot has
+# several redundant cron triggers so a Short still goes out even when GitHub
+# delays or silently drops a scheduled event. All morning crons fire before this
+# UTC hour and all evening crons after it, so the boundary cleanly maps a run to
+# its slot and the dedup guard publishes at most once per slot per day.
+SLOT_BOUNDARY_HOUR_UTC = 14
+
+
+def _slot_of(when: dt.datetime) -> str:
+    """Return the publish slot ("morning"/"evening") a datetime falls in."""
+    return "morning" if when.hour < SLOT_BOUNDARY_HOUR_UTC else "evening"
+
+
+def last_upload_time() -> dt.datetime | None:
+    """Most recent recorded upload time, or None if nothing uploaded yet."""
+    latest: dt.datetime | None = None
+    for entry in _load():
+        stamp = entry.get("uploaded_at")
+        if not stamp:
+            continue
+        try:
+            when = dt.datetime.fromisoformat(stamp)
+        except (TypeError, ValueError):
+            continue
+        if latest is None or when > latest:
+            latest = when
+    return latest
+
+
+def should_publish_now(now: dt.datetime | None = None) -> bool:
+    """Whether a Short should be published for the current slot.
+
+    Returns False when a Short was already uploaded in the same slot today, so
+    that the redundant cron triggers (backups against dropped/delayed schedules)
+    don't publish a duplicate. Fails open (True) when history is missing so a
+    genuine outage never silently stops publishing.
+    """
+    now = now or dt.datetime.now()
+    last = last_upload_time()
+    if last is None:
+        return True
+    return not (last.date() == now.date() and _slot_of(last) == _slot_of(now))
+
 
 def _load() -> list[dict[str, Any]]:
     if not PERFORMANCE_FILE.exists():
