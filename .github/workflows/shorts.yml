@@ -1,14 +1,26 @@
 name: Publish YouTube Short
 
-# Runs twice daily to generate + upload one Short per run.
-# Cron is in UTC. Times target ~13:22 / ~19:22 Europe/Istanbul (UTC+3).
+# Publishes one Short per slot, twice daily (morning + evening).
+# Cron is in UTC. Primary times target ~13:22 / ~19:22 Europe/Istanbul (UTC+3).
 # 2/day is optimal: avoids self-competition while maintaining consistency.
 # Off-the-hour minutes avoid the on-the-hour publishing rush most big
 # channels use, reducing competition in the first minutes after upload.
+#
+# GitHub frequently delays and sometimes silently drops scheduled events, so
+# each slot has several hourly backup triggers. A dedup guard (should-publish)
+# ensures at most one Short goes out per slot per day: the first trigger that
+# runs publishes, and later backups for the same slot no-op. All morning crons
+# stay before 14:00 UTC and all evening crons after it (the slot boundary).
 on:
   schedule:
-    - cron: "22 10 * * *"  # 13:22 Istanbul
-    - cron: "22 16 * * *"  # 19:22 Istanbul
+    - cron: "22 10 * * *"  # morning slot  (13:22 Istanbul)
+    - cron: "22 11 * * *"  # morning backup
+    - cron: "22 12 * * *"  # morning backup
+    - cron: "22 13 * * *"  # morning backup
+    - cron: "22 16 * * *"  # evening slot  (19:22 Istanbul)
+    - cron: "22 17 * * *"  # evening backup
+    - cron: "22 18 * * *"  # evening backup
+    - cron: "22 19 * * *"  # evening backup
   workflow_dispatch:
     inputs:
       topic:
@@ -57,7 +69,22 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
         run: printf '%s' "$YOUTUBE_CLIENT_SECRET" > client_secret.json
 
+      # Dedup guard: publish at most one Short per slot per day. Forced runs
+      # (workflow_dispatch) always publish; scheduled backups skip when a Short
+      # already went out in the current slot.
+      - name: Decide whether to publish
+        id: guard
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            decision=$(python -m ai_shorts_factory should-publish)
+            echo "publish=$decision" >> "$GITHUB_OUTPUT"
+          fi
+          echo "publish=${decision:-true} (event=${{ github.event_name }})"
+
       - name: Generate and upload Short
+        if: steps.guard.outputs.publish == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}

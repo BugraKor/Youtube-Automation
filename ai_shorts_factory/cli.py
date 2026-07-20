@@ -110,6 +110,18 @@ def _cmd_optimize(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_should_publish(args: argparse.Namespace) -> int:
+    """Print "true"/"false": whether a Short should publish for this slot.
+
+    Used by the workflow's dedup guard so the redundant cron triggers (backups
+    against dropped/delayed schedules) publish at most once per slot per day.
+    """
+    from . import optimizer
+
+    print("true" if optimizer.should_publish_now() else "false")
+    return 0
+
+
 def _cmd_auth(args: argparse.Namespace) -> int:
     """Run the one-time OAuth flow and print the refresh token for CI.
 
@@ -164,6 +176,12 @@ def main(argv: list[str] | None = None) -> int:
         "optimize", help="refresh video stats and report winning patterns"
     )
     p_opt.set_defaults(func=_cmd_optimize)
+
+    p_should = sub.add_parser(
+        "should-publish",
+        help="print true/false: whether a Short should publish for this slot",
+    )
+    p_should.set_defaults(func=_cmd_should_publish)
 
     args = parser.parse_args(argv)
     _setup_logging(args.verbose)
